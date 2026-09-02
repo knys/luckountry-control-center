@@ -62,11 +62,11 @@ test("T16 durable_open_failure_fails_startup", async (context) => {
 
 test("T17 restart_restores_then_continues_polling", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "lcc-003-restart-")); context.after(() => rm(directory, { recursive: true, force: true })); const path = join(directory, "state.json");
-  const saved: WorkItem = { id: "github:knys/shared:1", source: { provider: "github", repository: "knys/shared", externalId: "1" }, title: "Old", sourceState: "open", labels: [], assignees: [], sourceUrl: "https://github.com/knys/shared/issues/1", workState: "RUNNING", ballHolder: "HUMAN", nextAction: "Keep", blocker: null, acceptanceCriteria: [], evidence: ["saved"], sourceUpdatedAt: "2026-09-01T00:00:00Z", lastSyncedAt: "2026-09-01T00:00:00Z" };
+  const saved: WorkItem = { id: "github:knys/shared:1", source: { provider: "github", repository: "knys/shared", externalId: "1" }, title: "Old", sourceState: "open", labels: [], assignees: [], sourceUrl: "https://github.com/knys/shared/issues/1", workState: "RUNNING", ballHolder: "HUMAN", nextAction: { kind: "EXECUTE", summary: "Keep", ballHolder: "HUMAN", aiExecutable: false, requiredCapabilities: [] }, blocker: null, acceptanceCriteria: [], evidence: ["saved"], sourceUpdatedAt: "2026-09-01T00:00:00Z", lastSyncedAt: "2026-09-01T00:00:00Z", transitionReason: "Started" };
   const first = await DurableWorkItemRepository.open(path); await first.commitSync("knys/shared", [saved], { status: "SUCCEEDED", lastAttemptedSyncAt: saved.lastSyncedAt, lastSuccessfulSyncAt: saved.lastSyncedAt, failureReason: null, failureType: null, resetAt: null, retryAfter: null });
   const source: IssueSource = { fetchOpenIssues: async () => [{ externalId: "1", title: "New", state: "open", labels: [], assignees: [], updatedAt: "2026-09-02T00:00:00Z", url: saved.sourceUrl }] };
   const composition = await composeIssueRuntime(manifest, { WORK_ITEM_DATABASE_PATH: path }, { source, scheduler: noopScheduler }); composition.runtime.start(); await composition.runtime.stop();
-  const [restored] = await composition.repository.list("knys/shared"); assert.equal(restored?.title, "New"); assert.equal(restored?.workState, "RUNNING"); assert.equal(restored?.nextAction, "Keep"); assert.deepEqual(restored?.evidence, ["saved"]);
+  const [restored] = await composition.repository.list("knys/shared"); assert.equal(restored?.title, "New"); assert.equal(restored?.workState, "RUNNING"); assert.equal(restored?.nextAction.summary, "Keep"); assert.deepEqual(restored?.evidence, ["saved"]);
 });
 
 test("T18 existing_dashboard_regression", async () => {

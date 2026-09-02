@@ -1,4 +1,5 @@
 import type { FailureType, SyncMetadata, WorkItem } from "../domain/work-item.js";
+import { safeInitialExecution } from "../domain/work-state-machine.js";
 
 export interface ExternalIssue {
   externalId: string;
@@ -19,6 +20,7 @@ export interface WorkItemRepository {
   metadata(repository: string): Promise<SyncMetadata>;
   commitSync(repository: string, workItems: readonly WorkItem[], metadata: SyncMetadata): Promise<void>;
   recordFailure(repository: string, metadata: SyncMetadata): Promise<void>;
+  transitionExecutionState(id: string, update: (current: WorkItem) => WorkItem): Promise<WorkItem>;
 }
 
 export class SyncFailure extends Error {
@@ -44,6 +46,7 @@ export class IssueSyncService {
         }
         seen.add(external.externalId);
         const prior = existing.get(external.externalId);
+        const initial = safeInitialExecution();
         return {
           id: prior?.id ?? `github:${repositoryName}:${external.externalId}`,
           source: { provider: "github", repository: repositoryName, externalId: external.externalId },
@@ -52,14 +55,15 @@ export class IssueSyncService {
           labels: [...external.labels],
           assignees: [...external.assignees],
           sourceUrl: external.url,
-          workState: prior?.workState ?? "READY",
-          ballHolder: prior?.ballHolder ?? "CODEX",
-          nextAction: prior?.nextAction ?? null,
+          workState: prior?.workState ?? initial.workState,
+          ballHolder: prior?.ballHolder ?? initial.ballHolder,
+          nextAction: structuredClone(prior?.nextAction ?? initial.nextAction),
           blocker: prior?.blocker ?? null,
           acceptanceCriteria: [...(prior?.acceptanceCriteria ?? [])],
           evidence: [...(prior?.evidence ?? [])],
           sourceUpdatedAt: external.updatedAt,
           lastSyncedAt: attemptedAt
+          ,transitionReason: prior?.transitionReason ?? initial.transitionReason
         };
       });
       const metadata: SyncMetadata = { status: "SUCCEEDED", lastAttemptedSyncAt: attemptedAt, lastSuccessfulSyncAt: attemptedAt, failureReason: null, failureType: null, resetAt: null, retryAfter: null };
