@@ -28,6 +28,8 @@ LCC keeps GitHub Issue transport data separate from its execution state. `GitHub
 
 The production composition starts `IssuePollingRuntime` immediately and then polls each unique repository from the product manifest every 60 seconds without overlapping a repository. Override the interval with `WORK_ITEM_POLL_INTERVAL_MS` (minimum 10000). Runtime status is read-only at `GET /api/runtime`. GitHub authentication is injected from `GITHUB_TOKEN`; production may provide it through the optional root-managed `/etc/luckountry-control-center/environment` file. The token is never returned by the API.
 
+WorkItem execution uses a deterministic Domain state machine. Newly discovered Issues start at `DEFINED` with the Human ball and a non-executable `DEFINE` action; they never become `READY` without an explicit definition-completed event. Execution transitions are atomically persisted in schema v2, source polling cannot overwrite newer execution state, and read-only state is available at `GET /api/work-items`.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:

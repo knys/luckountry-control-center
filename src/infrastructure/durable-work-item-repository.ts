@@ -3,13 +3,14 @@ import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { failureTypes, type SyncMetadata, type WorkItem } from "../domain/work-item.js";
 import type { WorkItemRepository } from "../application/issue-sync-service.js";
+import { safeInitialExecution } from "../domain/work-state-machine.js";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 export const DEFAULT_WORK_ITEM_DATABASE_PATH = "/var/lib/luckountry-control-center/work-items.json";
 export type AtomicFileWriter = (path: string, contents: string) => Promise<void>;
 
 interface RepositoryData { workItems: WorkItem[]; metadata: SyncMetadata }
-interface Snapshot { schemaVersion: 1; repositories: Record<string, RepositoryData> }
+interface Snapshot { schemaVersion: 2; repositories: Record<string, RepositoryData> }
 
 export class DurableRepositoryError extends Error {
   constructor(message: string, readonly databasePath: string, options?: ErrorOptions) { super(message, options); this.name = "DurableRepositoryError"; }
@@ -27,7 +28,13 @@ export class DurableWorkItemRepository implements WorkItemRepository {
     if (!databasePath.trim()) throw new DurableRepositoryError("database path must not be empty", databasePath);
     try {
       const contents = await readFile(databasePath, "utf8");
-      return new DurableWorkItemRepository(databasePath, parseSnapshot(contents, databasePath), writer);
+      const snapshot = parseSnapshot(contents, databasePath);
+      const original = record(JSON.parse(contents));
+      if (original?.schemaVersion === 1) {
+        try { await writer(databasePath, serialize(snapshot)); }
+        catch (error) { throw storageError("cannot persist migration from schema version 1", databasePath, error); }
+      }
+      return new DurableWorkItemRepository(databasePath, snapshot, writer);
     } catch (error) {
       if (!isNotFound(error)) {
         if (error instanceof DurableRepositoryError) throw error;
@@ -49,7 +56,8 @@ export class DurableWorkItemRepository implements WorkItemRepository {
       validateRepositoryName(repository, this.databasePath);
       validateWorkItems(workItems, repository, this.databasePath);
       validateMetadata(metadata, this.databasePath);
-      next.repositories[repository] = { workItems: structuredClone(workItems) as WorkItem[], metadata: structuredClone(metadata) };
+      const current = new Map((next.repositories[repository]?.workItems ?? []).map((item) => [item.source.externalId, item]));
+      next.repositories[repository] = { workItems: structuredClone(workItems).map((item) => mergeExecution(item, current.get(item.source.externalId))), metadata: structuredClone(metadata) };
     });
   }
 
@@ -64,15 +72,26 @@ export class DurableWorkItemRepository implements WorkItemRepository {
     });
   }
 
-  private async update(change: (next: Snapshot) => void): Promise<void> {
+  async transitionExecutionState(id: string, update: (current: WorkItem) => WorkItem): Promise<WorkItem> {
+    return this.update((next) => {
+      for (const data of Object.values(next.repositories)) {
+        const index = data.workItems.findIndex((item) => item.id === id);
+        if (index >= 0) { const updated = structuredClone(update(structuredClone(data.workItems[index]!))); validateWorkItems([updated], updated.source.repository, this.databasePath); data.workItems[index] = updated; return updated; }
+      }
+      throw new DurableRepositoryError(`WorkItem not found: ${id}`, this.databasePath);
+    });
+  }
+
+  private async update<T>(change: (next: Snapshot) => T): Promise<T> {
     const operation = this.pending.then(async () => {
       const next = structuredClone(this.snapshot);
-      change(next);
+      const result = change(next);
       try { await this.writer(this.databasePath, serialize(next)); }
       catch (error) { throw storageError("cannot write durable repository", this.databasePath, error); }
       this.snapshot = next;
+      return structuredClone(result);
     });
-    this.pending = operation.catch(() => undefined);
+    this.pending = operation.then(() => undefined, () => undefined);
     return operation;
   }
 }
@@ -102,8 +121,9 @@ function parseSnapshot(contents: string, path: string): Snapshot {
   let value: unknown;
   try { value = JSON.parse(contents); }
   catch (error) { throw new DurableRepositoryError(`corrupt storage at ${path}: invalid JSON`, path, { cause: error }); }
-  const root = record(value);
+  let root = record(value);
   if (!root || typeof root.schemaVersion !== "number") throw new DurableRepositoryError(`invalid storage at ${path}: schema version is missing`, path);
+  if (root.schemaVersion === 1) { value = migrateV1(root, path); root = record(value)!; }
   if (root.schemaVersion !== CURRENT_SCHEMA_VERSION) throw new DurableRepositoryError(`unsupported schema version ${root.schemaVersion} at ${path}; expected ${CURRENT_SCHEMA_VERSION}`, path);
   const repositories = record(root.repositories);
   if (!repositories) throw new DurableRepositoryError(`invalid storage at ${path}: repositories are missing`, path);
@@ -124,9 +144,9 @@ function validateWorkItems(items: readonly unknown[], repository: string, path: 
     const valid = item && source && strings(item.labels) && strings(item.assignees) && strings(item.acceptanceCriteria) && strings(item.evidence)
       && requiredStrings(item, ["id", "title", "sourceState", "sourceUrl", "sourceUpdatedAt", "lastSyncedAt"])
       && requiredStrings(source, ["provider", "repository", "externalId"])
-      && source.repository === repository && ["READY", "RUNNING", "WAITING", "BLOCKED", "ACCEPTANCE", "DONE", "UNKNOWN"].includes(String(item.workState))
-      && ["CHATGPT", "CODEX", "HUMAN", "EXTERNAL", "NONE", "UNKNOWN"].includes(String(item.ballHolder))
-      && nullableString(item.nextAction) && nullableString(item.blocker);
+      && source.repository === repository && ["IDEA", "DEFINED", "READY", "RUNNING", "VERIFYING", "WAITING_HUMAN", "WAITING_WORKER", "BLOCKED", "FAILED", "RETRYING", "DONE", "UNKNOWN"].includes(String(item.workState))
+      && ["LCC", "CHATGPT", "CODEX", "HUMAN", "EXTERNAL", "NONE", "UNKNOWN"].includes(String(item.ballHolder))
+      && validNextAction(item.nextAction) && nullableString(item.blocker) && typeof item.transitionReason === "string";
     const reference = valid ? `${source.provider}:${source.repository}:${source.externalId}` : "";
     if (!valid || references.has(reference)) throw new DurableRepositoryError(`invalid storage at ${path}: invalid or duplicate WorkItem source reference`, path);
     references.add(reference);
@@ -151,3 +171,32 @@ function requiredStrings(value: Record<string, unknown>, keys: readonly string[]
 function validateRepositoryName(value: string, path: string): void { if (!value.trim()) throw new DurableRepositoryError(`invalid storage at ${path}: empty repository name`, path); }
 function isNotFound(error: unknown): boolean { return error instanceof Error && "code" in error && error.code === "ENOENT"; }
 function storageError(message: string, path: string, cause: unknown): DurableRepositoryError { return new DurableRepositoryError(`${message} at ${path}: ${cause instanceof Error ? cause.message : "unknown error"}`, path, { cause }); }
+
+function validNextAction(value: unknown): boolean { const item = record(value); return !!item && ["DEFINE", "EXECUTE", "VERIFY", "RETRY", "WAIT_HUMAN", "WAIT_WORKER", "RESOLVE_BLOCKER", "INVESTIGATE", "NONE", "UNKNOWN"].includes(String(item.kind)) && typeof item.summary === "string" && ["LCC", "CHATGPT", "CODEX", "HUMAN", "EXTERNAL", "NONE", "UNKNOWN"].includes(String(item.ballHolder)) && typeof item.aiExecutable === "boolean" && strings(item.requiredCapabilities); }
+function mergeExecution(source: WorkItem, current?: WorkItem): WorkItem { return current ? { ...source, workState: current.workState, ballHolder: current.ballHolder, nextAction: structuredClone(current.nextAction), blocker: current.blocker, acceptanceCriteria: [...current.acceptanceCriteria], evidence: [...current.evidence], transitionReason: current.transitionReason } : source; }
+
+function migrateV1(root: Record<string, unknown>, path: string): Snapshot {
+  const repositories = record(root.repositories);
+  if (!repositories) throw new DurableRepositoryError(`migration from schema version 1 failed at ${path}: repositories missing`, path);
+  const migrated: Record<string, RepositoryData> = {};
+  for (const [name, raw] of Object.entries(repositories)) {
+    const data = record(raw); if (!data || !Array.isArray(data.workItems)) throw new DurableRepositoryError(`migration from schema version 1 failed at ${path}: invalid repository ${name}`, path);
+    const metadata = data.metadata as SyncMetadata;
+    migrated[name] = { metadata: structuredClone(metadata), workItems: data.workItems.map((rawItem) => migrateV1Item(rawItem, path)) };
+  }
+  return { schemaVersion: 2, repositories: migrated };
+}
+
+function migrateV1Item(raw: unknown, path: string): WorkItem {
+  const item = record(raw); if (!item || typeof item.workState !== "string") throw new DurableRepositoryError(`migration from schema version 1 failed at ${path}: invalid WorkItem`, path);
+  const oldState = item.workState;
+  const safe = safeInitialExecution();
+  let execution = safe;
+  if (oldState === "RUNNING") execution = { workState: "RUNNING", ballHolder: item.ballHolder === "CHATGPT" ? "CHATGPT" : "CODEX", nextAction: { kind: "EXECUTE", summary: typeof item.nextAction === "string" ? item.nextAction : "Continue execution", ballHolder: item.ballHolder === "CHATGPT" ? "CHATGPT" : "CODEX", aiExecutable: true, requiredCapabilities: ["CODE_EDIT"] }, transitionReason: "Migrated active execution from schema v1" };
+  else if (oldState === "ACCEPTANCE") execution = { workState: "VERIFYING", ballHolder: "HUMAN", nextAction: { kind: "WAIT_HUMAN", summary: typeof item.nextAction === "string" ? item.nextAction : "Complete human acceptance", ballHolder: "HUMAN", aiExecutable: false, requiredCapabilities: [] }, transitionReason: "Migrated ACCEPTANCE from schema v1" };
+  else if (oldState === "WAITING") execution = { workState: "WAITING_HUMAN", ballHolder: "HUMAN", nextAction: { kind: "WAIT_HUMAN", summary: typeof item.nextAction === "string" ? item.nextAction : "Review waiting work", ballHolder: "HUMAN", aiExecutable: false, requiredCapabilities: [] }, transitionReason: "Migrated WAITING from schema v1" };
+  else if (oldState === "BLOCKED") execution = { workState: "BLOCKED", ballHolder: item.ballHolder === "EXTERNAL" ? "EXTERNAL" : "HUMAN", nextAction: { kind: "RESOLVE_BLOCKER", summary: typeof item.blocker === "string" ? item.blocker : "Resolve blocker", ballHolder: item.ballHolder === "EXTERNAL" ? "EXTERNAL" : "HUMAN", aiExecutable: false, requiredCapabilities: [] }, transitionReason: "Migrated BLOCKED from schema v1" };
+  else if (oldState === "DONE") execution = { workState: "DONE", ballHolder: "NONE", nextAction: { kind: "NONE", summary: "No further action", ballHolder: "NONE", aiExecutable: false, requiredCapabilities: [] }, transitionReason: "Migrated DONE from schema v1" };
+  else if (oldState === "UNKNOWN") execution = { workState: "UNKNOWN", ballHolder: "UNKNOWN", nextAction: { kind: "UNKNOWN", summary: "Investigate unknown execution state", ballHolder: "UNKNOWN", aiExecutable: false, requiredCapabilities: [] }, transitionReason: "Migrated UNKNOWN from schema v1" };
+  return { ...(item as unknown as WorkItem), ...execution, blocker: typeof item.blocker === "string" ? item.blocker : null };
+}

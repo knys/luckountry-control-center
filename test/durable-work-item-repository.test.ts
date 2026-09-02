@@ -10,7 +10,7 @@ import type { SyncMetadata, WorkItem } from "../src/domain/work-item.js";
 const repositoryName = "knys/luckountry-control-center";
 const successfulAt = "2026-09-03T01:00:00.000Z";
 const metadata = (changes: Partial<SyncMetadata> = {}): SyncMetadata => ({ status: "SUCCEEDED", lastAttemptedSyncAt: successfulAt, lastSuccessfulSyncAt: successfulAt, failureReason: null, failureType: null, resetAt: null, retryAfter: null, ...changes });
-const workItem = (changes: Partial<WorkItem> = {}): WorkItem => ({ id: `github:${repositoryName}:4`, source: { provider: "github", repository: repositoryName, externalId: "4" }, title: "Durable repository", sourceState: "open", labels: ["feature"], assignees: ["knys"], sourceUrl: `https://github.com/${repositoryName}/issues/4`, workState: "RUNNING", ballHolder: "HUMAN", nextAction: "Review persistence", blocker: null, acceptanceCriteria: ["survives restart"], evidence: ["test"], sourceUpdatedAt: "2026-09-03T00:00:00Z", lastSyncedAt: successfulAt, ...changes });
+const workItem = (changes: Partial<WorkItem> = {}): WorkItem => ({ id: `github:${repositoryName}:4`, source: { provider: "github", repository: repositoryName, externalId: "4" }, title: "Durable repository", sourceState: "open", labels: ["feature"], assignees: ["knys"], sourceUrl: `https://github.com/${repositoryName}/issues/4`, workState: "RUNNING", ballHolder: "HUMAN", nextAction: { kind: "EXECUTE", summary: "Review persistence", ballHolder: "HUMAN", aiExecutable: false, requiredCapabilities: [] }, blocker: null, acceptanceCriteria: ["survives restart"], evidence: ["test"], sourceUpdatedAt: "2026-09-03T00:00:00Z", lastSyncedAt: successfulAt, transitionReason: "Started", ...changes });
 const externalIssue = (changes: Partial<ExternalIssue> = {}): ExternalIssue => ({ externalId: "4", title: "Updated source title", state: "open", labels: ["changed"], assignees: [], updatedAt: "2026-09-03T02:00:00Z", url: `https://github.com/${repositoryName}/issues/4`, ...changes });
 
 async function fixture() {
@@ -52,7 +52,7 @@ test("T04 preserve_execution_state_on_resync", async (context) => {
   assert.equal(restored?.title, "Updated source title");
   assert.equal(restored?.workState, "RUNNING");
   assert.equal(restored?.ballHolder, "HUMAN");
-  assert.equal(restored?.nextAction, "Review persistence");
+  assert.equal(restored?.nextAction.summary, "Review persistence");
   assert.deepEqual(restored?.evidence, ["test"]);
 });
 

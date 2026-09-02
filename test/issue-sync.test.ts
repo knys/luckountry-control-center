@@ -28,7 +28,7 @@ test("T01 fetch_open_issues", async () => {
 test("T02 map_issue_fields", async () => {
   const { service } = sync(source());
   const [item] = await service.sync(repositoryName);
-  assert.deepEqual(item, { id: `github:${repositoryName}:1`, source: { provider: "github", repository: repositoryName, externalId: "1" }, title: "Build issue sync", sourceState: "open", labels: ["feature"], assignees: ["knys"], sourceUrl: issue().url, workState: "READY", ballHolder: "CODEX", nextAction: null, blocker: null, acceptanceCriteria: [], evidence: [], sourceUpdatedAt: issue().updatedAt, lastSyncedAt: attemptedAt });
+  assert.deepEqual(item, { id: `github:${repositoryName}:1`, source: { provider: "github", repository: repositoryName, externalId: "1" }, title: "Build issue sync", sourceState: "open", labels: ["feature"], assignees: ["knys"], sourceUrl: issue().url, workState: "DEFINED", ballHolder: "HUMAN", nextAction: { kind: "DEFINE", summary: "Complete the definition and Coding Ready Gate", ballHolder: "HUMAN", aiExecutable: false, requiredCapabilities: [] }, blocker: null, acceptanceCriteria: [], evidence: [], sourceUpdatedAt: issue().updatedAt, lastSyncedAt: attemptedAt, transitionReason: "Source discovered; explicit definition completion is required" });
 });
 
 test("T03 empty_repository", async () => {
@@ -122,7 +122,7 @@ test("T14 integration_github", { skip: process.env.LCC_GITHUB_INTEGRATION !== "1
 test("repository commit is atomic when persistence throws", async () => {
   const backing = new InMemoryWorkItemRepository();
   await new IssueSyncService(source([issue({ externalId: "9" })]), backing, clock).sync(repositoryName);
-  const failing: WorkItemRepository = { list: (name) => backing.list(name), metadata: (name) => backing.metadata(name), recordFailure: (name, value) => backing.recordFailure(name, value), commitSync: async () => { throw new Error("disk full"); } };
+  const failing: WorkItemRepository = { list: (name) => backing.list(name), metadata: (name) => backing.metadata(name), recordFailure: (name, value) => backing.recordFailure(name, value), commitSync: async () => { throw new Error("disk full"); }, transitionExecutionState: (id, update) => backing.transitionExecutionState(id, update) };
   await assert.rejects(new IssueSyncService(source(), failing, clock).sync(repositoryName));
   assert.equal((await backing.list(repositoryName))[0]?.source.externalId, "9");
 });
