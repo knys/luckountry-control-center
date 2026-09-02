@@ -1,6 +1,6 @@
 # Luckountry Control Center
 
-Lightweight, read-only device dashboard for Luckountry's GTX1060 PC, TOBIE BOX, and TX66KWH. It listens on `0.0.0.0:3000` and refreshes telemetry every five seconds.
+Lightweight, read-only operations dashboard for Luckountry's products and the GTX1060 PC, TOBIE BOX, and TX66KWH. It listens on `0.0.0.0:3000`, refreshes the UI every five seconds, and caches GitHub metadata for 60 seconds.
 
 ## Development
 
@@ -12,7 +12,13 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3000`. API endpoints are `GET /health`, `GET /api/devices`, and the backward-compatible `GET /api/system-status`.
+Open `http://localhost:3000`. API endpoints are `GET /health`, `GET /api/devices`, `GET /api/products`, and the backward-compatible `GET /api/system-status`.
+
+## Product Control SSOT
+
+`config/products.json` is the allowlisted product manifest. Humans or ChatGPT maintain the semantic fields (`summary`, `status`, `ball`, and `nextAction`). The server supplements those fields with the default branch, HEAD SHA, open Issue/PR counts, repository URL, and repository update time through one read-only `gh api graphql` process per cache refresh. GitHub credentials never enter an API response or browser code. If GitHub is unavailable, the server returns its latest in-memory metadata with `stale: true`; product and device endpoints remain independent.
+
+Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE`, and `UNKNOWN`. Valid ball owners are `CHATGPT`, `CODEX`, `HUMAN`, `EXTERNAL`, `NONE`, and `UNKNOWN`. Multiple products may reference the same repository. Restart the service after changing the manifest.
 
 ## Remote device agents
 

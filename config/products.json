@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "products": [
+    { "id": "padchin-android", "name": "PADCHIN Android", "repository": "knys/PADCHIN", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "padchin-pwa", "name": "PADCHIN PWA", "repository": "knys/PADCHIN-PWA", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "tobie-draw", "name": "TOBIE DRAW", "repository": "knys/TOBIE", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "tobie-wall", "name": "TOBIE WALL", "repository": "knys/TOBIE", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "tobie-battle", "name": "TOBIE BATTLE", "repository": "knys/TOBIE", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "tobie-race", "name": "TOBIE RACE", "repository": "knys/TOBIE", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "tobie-ios-host", "name": "TOBIE iOS HOST", "repository": "knys/TOBIE-IOS-HOST", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "barepo", "name": "BAREPO", "repository": null, "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Confirm the canonical GitHub repository" },
+    { "id": "luckountry-website", "name": "Luckountry Website", "repository": "knys/luckountry-web", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" },
+    { "id": "luckountry-control-center", "name": "Luckountry Control Center", "repository": "knys/luckountry-control-center", "summary": "REVIEW REQUIRED", "status": "UNKNOWN", "ball": "UNKNOWN", "nextAction": "Review and update product manifest" }
+  ]
+}
