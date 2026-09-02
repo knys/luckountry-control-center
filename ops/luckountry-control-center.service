@@ -11,11 +11,13 @@ WorkingDirectory=/opt/luckountry-control-center
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=3000
+Environment=WORK_ITEM_DATABASE_PATH=/var/lib/luckountry-control-center/work-items.json
 ExecStart=/usr/bin/node /opt/luckountry-control-center/dist/server.js
 Restart=on-failure
 RestartSec=5s
 PrivateTmp=true
 ProtectSystem=strict
+ReadWritePaths=/var/lib/luckountry-control-center
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
