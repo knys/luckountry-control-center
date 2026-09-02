@@ -40,7 +40,9 @@ export function parseSmartHealth(text: string): SmartHealth {
 }
 
 export function parseSmartTemperature(text: string): number | null {
-  const attribute = text.match(/^194\s+Temperature_Celsius\s+.*?(-?\d+)\s*$/m);
+  const attribute = text.match(
+    /^\s*\d+\s+(?:Temperature_Celsius|Temperature_Internal|Airflow_Temperature_Cel)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(-?\d+)(?:\s|$)/im
+  );
   if (attribute?.[1]) return Number(attribute[1]);
   const modern = text.match(/Temperature(?: Sensor \d+)?\s*:\s*(-?\d+)\s+Celsius/i);
   return modern?.[1] ? Number(modern[1]) : null;
