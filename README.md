@@ -20,6 +20,10 @@ Open `http://localhost:3000`. API endpoints are `GET /health`, `GET /api/devices
 
 Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE`, and `UNKNOWN`. Valid ball owners are `CHATGPT`, `CODEX`, `HUMAN`, `EXTERNAL`, `NONE`, and `UNKNOWN`. Multiple products may reference the same repository. Restart the service after changing the manifest.
 
+## WorkItem issue sync foundation
+
+LCC keeps GitHub Issue transport data separate from its execution state. `GitHubIssueAdapter` reads and validates open Issues, `IssueSyncService` maps a complete response to provider-neutral `WorkItem` records, and `WorkItemRepository` commits the records and successful sync metadata atomically. Failed fetches or validation preserve the last good records while recording a classified failure and attempt time. The initial repository implementation is in-memory and is intended to be replaced behind the repository interface when durable storage is introduced.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:
