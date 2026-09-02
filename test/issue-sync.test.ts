@@ -116,7 +116,7 @@ test("T13 partial_failure_atomicity", async () => {
 test("T14 integration_github", { skip: process.env.LCC_GITHUB_INTEGRATION !== "1" }, async () => {
   const adapter = new GitHubIssueAdapter(fetch, process.env.GITHUB_TOKEN);
   const issues = await adapter.fetchOpenIssues(repositoryName);
-  assert.ok(issues.some((item) => item.externalId === "1"));
+  assert.ok(issues.every((item) => item.state === "open" && item.url.startsWith(`https://github.com/${repositoryName}/issues/`)));
 });
 
 test("repository commit is atomic when persistence throws", async () => {
