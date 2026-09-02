@@ -26,6 +26,8 @@ LCC keeps GitHub Issue transport data separate from its execution state. `GitHub
 
 `DurableWorkItemRepository` stores a versioned, atomic JSON snapshot using only Node.js 20 standard APIs. Its default production path is `/var/lib/luckountry-control-center/work-items.json`; override it with `WORK_ITEM_DATABASE_PATH`. Corrupt or unsupported storage fails explicitly and is never replaced with an empty snapshot. `InMemoryWorkItemRepository` remains the test double.
 
+The production composition starts `IssuePollingRuntime` immediately and then polls each unique repository from the product manifest every 60 seconds without overlapping a repository. Override the interval with `WORK_ITEM_POLL_INTERVAL_MS` (minimum 10000). Runtime status is read-only at `GET /api/runtime`. GitHub authentication is injected from `GITHUB_TOKEN`; production may provide it through the optional root-managed `/etc/luckountry-control-center/environment` file. The token is never returned by the API.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:

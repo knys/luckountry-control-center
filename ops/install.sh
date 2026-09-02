@@ -3,6 +3,7 @@ set -eu
 test "$(id -u)" -eq 0 || { echo "Run as root" >&2; exit 1; }
 id luckountry >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin luckountry
 install -d -o root -g root -m 0755 /opt/luckountry-control-center /opt/luckountry-control-center/dist /usr/local/libexec
+install -d -o root -g root -m 0750 /etc/luckountry-control-center
 install -d -o luckountry -g luckountry -m 0750 /var/lib/luckountry-control-center
 cp -R dist/. /opt/luckountry-control-center/dist/
 install -o root -g root -m 0755 ops/luckountry-smart-status /usr/local/libexec/luckountry-smart-status

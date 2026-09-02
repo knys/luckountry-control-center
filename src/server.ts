@@ -5,16 +5,32 @@ import { fileURLToPath } from "node:url";
 import { createDeviceProviders } from "./devices.js";
 import { GhCliMetadataProvider, parseProductsManifest, ProductService } from "./products.js";
 import { createRequestHandler } from "./http-app.js";
+import { composeIssueRuntime } from "./composition.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? "3000");
 const manifestPath = process.env.PRODUCTS_MANIFEST ?? join(dirname(fileURLToPath(import.meta.url)), "config", "products.json");
 const deviceProviders = createDeviceProviders();
-const productService = new ProductService(parseProductsManifest(JSON.parse(await readFile(manifestPath, "utf8"))), new GhCliMetadataProvider());
-const server = createServer(createRequestHandler(productService, deviceProviders));
+const manifest = parseProductsManifest(JSON.parse(await readFile(manifestPath, "utf8")));
+const productService = new ProductService(manifest, new GhCliMetadataProvider());
+const issueRuntime = await composeIssueRuntime(manifest);
+const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status()));
 
 server.listen(port, host, () => console.log(`Luckountry Control Center listening on http://${host}:${port}`));
+issueRuntime.runtime.start();
 
-function shutdown(): void { server.close(() => process.exit(0)); }
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+let shutdownStarted = false;
+async function shutdown(): Promise<void> {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  await issueRuntime.runtime.stop();
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+function handleSignal(): void {
+  void shutdown().then(() => process.exit(0), (error: unknown) => {
+    console.error(error instanceof Error ? `${error.name}: ${error.message}` : "shutdown failed");
+    process.exit(1);
+  });
+}
+process.on("SIGTERM", handleSignal);
+process.on("SIGINT", handleSignal);
