@@ -15,7 +15,7 @@ This is the required feature-missing RED state, not a syntax, import, configurat
 
 - `npm test`: PASS
 - Explicit T14 command: `LCC_GITHUB_INTEGRATION=1 node .test-dist/test/issue-sync.test.js`
-- T14 result: PASS against the public `knys/luckountry-control-center` repository
+- T14 result: PASS against the public `knys/luckountry-control-center` repository. The assertion validates the live open-Issue contract without depending on one Issue remaining open.
 
 ## Acceptance verification
 
