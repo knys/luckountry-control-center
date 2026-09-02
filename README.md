@@ -22,7 +22,9 @@ Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE
 
 ## WorkItem issue sync foundation
 
-LCC keeps GitHub Issue transport data separate from its execution state. `GitHubIssueAdapter` reads and validates open Issues, `IssueSyncService` maps a complete response to provider-neutral `WorkItem` records, and `WorkItemRepository` commits the records and successful sync metadata atomically. Failed fetches or validation preserve the last good records while recording a classified failure and attempt time. The initial repository implementation is in-memory and is intended to be replaced behind the repository interface when durable storage is introduced.
+LCC keeps GitHub Issue transport data separate from its execution state. `GitHubIssueAdapter` reads and validates open Issues, `IssueSyncService` maps a complete response to provider-neutral `WorkItem` records, and `WorkItemRepository` commits the records and successful sync metadata atomically. Failed fetches or validation preserve the last good records while recording a classified failure and attempt time.
+
+`DurableWorkItemRepository` stores a versioned, atomic JSON snapshot using only Node.js 20 standard APIs. Its default production path is `/var/lib/luckountry-control-center/work-items.json`; override it with `WORK_ITEM_DATABASE_PATH`. Corrupt or unsupported storage fails explicitly and is never replaced with an empty snapshot. `InMemoryWorkItemRepository` remains the test double.
 
 ## Remote device agents
 
