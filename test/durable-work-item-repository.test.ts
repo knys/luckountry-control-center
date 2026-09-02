@@ -34,6 +34,16 @@ test("T02 restore_after_repository_recreate", async (context) => {
   assert.deepEqual(await recreated.list(repositoryName), [workItem()]);
 });
 
+test("LCC-005 schema v2 migrates explicitly to v3 without changing WorkItems", async (context) => {
+  const file = await fixture(); context.after(file.cleanup);
+  const original = workItem();
+  await writeFile(file.path, `${JSON.stringify({ schemaVersion: 2, repositories: { [repositoryName]: { workItems: [original], metadata: metadata() } } }, null, 2)}\n`, "utf8");
+  const repository = await DurableWorkItemRepository.open(file.path);
+  assert.deepEqual(await repository.list(repositoryName), [original]);
+  assert.deepEqual(await repository.executionState(), { leases: [], records: [] });
+  assert.equal(JSON.parse(await readFile(file.path, "utf8")).schemaVersion, 3);
+});
+
 test("T03 persist_sync_metadata", async (context) => {
   const file = await fixture(); context.after(file.cleanup);
   const first = await DurableWorkItemRepository.open(file.path);
@@ -89,7 +99,7 @@ test("T07 record_failure_preserves_last_good_state", async (context) => {
 test("T08 initialize_schema_first_run", async (context) => {
   const file = await fixture(); context.after(file.cleanup);
   await DurableWorkItemRepository.open(file.path);
-  assert.deepEqual(JSON.parse(await readFile(file.path, "utf8")), { schemaVersion: CURRENT_SCHEMA_VERSION, repositories: {} });
+  assert.deepEqual(JSON.parse(await readFile(file.path, "utf8")), { schemaVersion: CURRENT_SCHEMA_VERSION, repositories: {}, execution: { leases: [], records: [] } });
 });
 
 test("T09 schema_initialization_idempotent", async (context) => {

@@ -16,7 +16,7 @@ const manifest = parseProductsManifest(JSON.parse(await readFile(manifestPath, "
 const productService = new ProductService(manifest, new GhCliMetadataProvider());
 const issueRuntime = await composeIssueRuntime(manifest);
 const repositories = discoverRepositories(manifest);
-const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat()));
+const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined));
 
 server.listen(port, host, () => console.log(`Luckountry Control Center listening on http://${host}:${port}`));
 issueRuntime.runtime.start();

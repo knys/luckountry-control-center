@@ -3,6 +3,7 @@ import { IssueSyncService, type IssueSource, type WorkItemRepository } from "./a
 import { IssuePollingRuntime, pollIntervalFromEnvironment, type Scheduler } from "./application/issue-polling-runtime.js";
 import { GitHubIssueAdapter } from "./infrastructure/github-issue-adapter.js";
 import { DurableWorkItemRepository, workItemDatabasePath } from "./infrastructure/durable-work-item-repository.js";
+import type { ExecutionRepository } from "./application/execution.js";
 
 export function discoverRepositories(manifest: ProductsManifest): string[] {
   return [...new Set(manifest.products.flatMap((product) => product.repository ? [product.repository] : []))];
@@ -14,12 +15,12 @@ export interface CompositionDependencies {
   scheduler?: Scheduler;
 }
 
-export interface IssueRuntimeComposition { repository: WorkItemRepository; adapter: GitHubIssueAdapter | IssueSource; syncService: IssueSyncService; runtime: IssuePollingRuntime }
+export interface IssueRuntimeComposition { repository: WorkItemRepository & Partial<ExecutionRepository>; adapter: GitHubIssueAdapter | IssueSource; syncService: IssueSyncService; runtime: IssuePollingRuntime }
 
 export async function composeIssueRuntime(manifest: ProductsManifest, environment: NodeJS.ProcessEnv = process.env, dependencies: CompositionDependencies = {}): Promise<IssueRuntimeComposition> {
   const repository = await (dependencies.openRepository ?? DurableWorkItemRepository.open)(workItemDatabasePath(environment));
   const adapter = dependencies.source ?? new GitHubIssueAdapter(fetch, environment.GITHUB_TOKEN);
   const syncService = new IssueSyncService(adapter, repository);
   const runtime = new IssuePollingRuntime(discoverRepositories(manifest), syncService, pollIntervalFromEnvironment(environment), dependencies.scheduler);
-  return { repository, adapter, syncService, runtime };
+  return { repository: repository as WorkItemRepository & Partial<ExecutionRepository>, adapter, syncService, runtime };
 }
