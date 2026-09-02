@@ -1,0 +1,2 @@
+# Only this fixed, root-owned wrapper may be run by the service account.
+luckountry ALL=(root) NOPASSWD: /usr/local/libexec/luckountry-smart-status

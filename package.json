@@ -1,0 +1,19 @@
+{
+  "name": "luckountry-control-center",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "clean": "rm -rf dist .test-dist",
+    "build": "npm run clean && tsc -p tsconfig.json && mkdir -p dist/public && cp src/public/index.html src/public/styles.css dist/public/",
+    "build:test": "rm -rf .test-dist && tsc -p tsconfig.test.json",
+    "test": "npm run build:test && node --test .test-dist/test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "start": "node dist/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.8.3"
+  }
+}

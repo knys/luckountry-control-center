@@ -1,0 +1,28 @@
+[Unit]
+Description=Luckountry Control Center
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=luckountry
+Group=luckountry
+WorkingDirectory=/opt/luckountry-control-center
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=3000
+ExecStart=/usr/bin/node /opt/luckountry-control-center/dist/server.js
+Restart=on-failure
+RestartSec=5s
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

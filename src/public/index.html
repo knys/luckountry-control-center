@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Luckountry Control Center</title><link rel="stylesheet" href="/styles.css"></head>
+<body><main>
+  <header><div><p class="eyebrow">SYSTEM OPERATIONS // TX-66KWH</p><h1>LUCKOUNTRY <span>CONTROL CENTER</span></h1></div><div class="master online" id="master"><i></i><strong>ONLINE</strong><small id="clock">--:--:-- JST</small></div></header>
+  <section class="identity"><div><label>NODE</label><b id="hostname">---</b></div><div><label>OPERATING SYSTEM</label><b id="os">---</b></div><div><label>KERNEL</label><b id="kernel">---</b></div><div><label>UPTIME</label><b id="uptime">---</b></div></section>
+  <section class="grid">
+    <article class="panel cpu"><div class="panel-head"><span>PROCESSOR</span><em id="cpu-state">ONLINE</em></div><p class="model" id="cpu-model">---</p><div class="metric"><strong id="cpu-usage">--%</strong><span>CPU LOAD</span></div><div class="bar"><i id="cpu-bar"></i></div><div class="cores"><div><label>CORE 0</label><b id="core0">--°C</b></div><div><label>CORE 1</label><b id="core1">--°C</b></div></div></article>
+    <article class="panel"><div class="panel-head"><span>MEMORY</span><em id="memory-state">ONLINE</em></div><div class="metric"><strong id="memory-percent">--%</strong><span>UTILIZATION</span></div><div class="bar"><i id="memory-bar"></i></div><p class="capacity" id="memory-capacity">-- / --</p></article>
+    <article class="panel"><div class="panel-head"><span>ROOT FILESYSTEM</span><em id="disk-state">ONLINE</em></div><div class="metric"><strong id="disk-percent">--%</strong><span>CAPACITY</span></div><div class="bar"><i id="disk-bar"></i></div><p class="capacity" id="disk-capacity">-- / --</p></article>
+    <article class="panel systems"><div class="panel-head"><span>SYSTEM LINK</span><em id="link-state">ONLINE</em></div><div class="row"><label>INTERFACE</label><b id="interface">---</b></div><div class="row"><label>IPv4</label><b id="ipv4">---</b></div><div class="row"><label>SSH SERVICE</label><b id="ssh">---</b></div><div class="row"><label>CONTROL SERVER</label><b id="server">ONLINE</b></div></article>
+    <article class="panel smart"><div class="panel-head"><span>HDD TELEMETRY</span><em id="smart-state">UNKNOWN</em></div><div class="smart-main"><div><label>SMART OVERALL</label><strong id="smart-health">UNKNOWN</strong></div><div><label>DRIVE TEMP</label><strong id="hdd-temp">--°C</strong></div></div><p id="smart-note">Awaiting privileged sensor link</p></article>
+  </section>
+  <footer><span>LC3 // STATION 01</span><span id="updated">TELEMETRY INITIALIZING</span><span>REFRESH 5 SEC</span></footer>
+</main><script type="module" src="/app.js"></script></body></html>

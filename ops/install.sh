@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+test "$(id -u)" -eq 0 || { echo "Run as root" >&2; exit 1; }
+id luckountry >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin luckountry
+install -d -o root -g root -m 0755 /opt/luckountry-control-center /opt/luckountry-control-center/dist /usr/local/libexec
+cp -R dist/. /opt/luckountry-control-center/dist/
+install -o root -g root -m 0755 ops/luckountry-smart-status /usr/local/libexec/luckountry-smart-status
+install -o root -g root -m 0440 ops/luckountry-control-center.sudoers /etc/sudoers.d/luckountry-control-center
+visudo -cf /etc/sudoers.d/luckountry-control-center
+install -o root -g root -m 0644 ops/luckountry-control-center.service /etc/systemd/system/luckountry-control-center.service
+systemctl daemon-reload
+systemctl enable --now luckountry-control-center.service
