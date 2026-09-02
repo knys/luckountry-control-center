@@ -2,16 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Luckountry Control Center</title><link rel="stylesheet" href="/styles.css"></head>
 <body><main>
   <header><div><p class="eyebrow">LUCKOUNTRY OPERATIONS // PRODUCT &amp; DEVICE NETWORK</p><h1>LUCKOUNTRY <span>CONTROL CENTER</span></h1></div><div class="health-stack"><div class="health-row"><small>DEVICE</small><strong class="online" id="device-health">---</strong></div><div class="health-row"><small>WORKFLOW</small><strong class="unknown" id="workflow-health">---</strong></div><time id="clock">--:--:-- JST</time></div></header>
-  <section class="devices-section"><div class="section-title"><span>DEVICES</span><small>LAN TELEMETRY MATRIX</small></div><div class="device-grid" id="devices"></div></section>
+  <section class="devices-section"><div class="section-title"><span>DEVICES</span><small id="devices-updated">LAN TELEMETRY MATRIX</small></div><div class="device-table"><div class="device-row device-header"><span>DEVICE</span><span>STATUS</span><span>IP</span><span>CPU</span><span>TEMP</span><span>RAM</span><span>DISK</span><span>UPTIME</span><span>LAST SEEN</span></div><div id="devices"></div></div></section>
   <section class="products-section"><div class="section-title"><span>PRODUCTS</span><small id="products-updated">WORKFLOW INITIALIZING</small></div><div class="product-table"><div class="product-row product-header"><span>PRODUCT</span><span>STATUS</span><span>BALL</span><span>SUMMARY</span><span>NEXT ACTION</span><span>REPO / UPDATED</span></div><div id="products"></div></div></section>
-  <section class="local-section">
-    <div class="section-title"><span>TX66KWH // LOCAL DETAIL</span><small id="local-updated">TELEMETRY INITIALIZING</small></div>
-    <div class="local-grid">
-      <article class="panel"><div class="panel-head"><span>PROCESSOR</span><em id="cpu-state">---</em></div><div class="local-metric"><strong id="cpu-usage">--%</strong><span id="cpu-temp">--°C</span></div><div class="bar"><i id="cpu-bar"></i></div></article>
-      <article class="panel"><div class="panel-head"><span>MEMORY</span><em id="memory-state">---</em></div><div class="local-metric"><strong id="memory-percent">--%</strong><span id="memory-capacity">-- / --</span></div><div class="bar"><i id="memory-bar"></i></div></article>
-      <article class="panel"><div class="panel-head"><span>ROOT FILESYSTEM</span><em id="disk-state">---</em></div><div class="local-metric"><strong id="disk-percent">--%</strong><span id="disk-capacity">-- / --</span></div><div class="bar"><i id="disk-bar"></i></div></article>
-      <article class="panel"><div class="panel-head"><span>SYSTEM LINK</span><em id="smart-state">---</em></div><div class="link-grid"><span>IPv4 <b id="local-ip">---</b></span><span>UPTIME <b id="local-uptime">---</b></span><span>SMART <b id="smart-health">---</b></span></div></article>
-    </div>
-  </section>
   <footer><span>LC3 // v0.3 PRODUCT CONTROL</span><span id="updated">DEVICE TELEMETRY INITIALIZING</span><span>UI 5 SEC // GITHUB 60 SEC</span></footer>
 </main><script type="module" src="/app.js"></script></body></html>
