@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectSystemStatus } from "./system.js";
+import { collectDeviceStatuses, createDeviceProviders } from "./devices.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? "3000");
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
+const deviceProviders = createDeviceProviders();
 const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]]]);
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -18,8 +20,9 @@ const server = createServer(async (request, response) => {
   try {
     if (request.method !== "GET") return json(response, 405, { error: "method_not_allowed" });
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    if (path === "/health") return json(response, 200, { status: "ok", service: "luckountry-control-center", version: "0.1.0" });
+    if (path === "/health") return json(response, 200, { status: "ok", service: "luckountry-control-center", version: "0.2.0" });
     if (path === "/api/system-status") return json(response, 200, await collectSystemStatus());
+    if (path === "/api/devices") return json(response, 200, { timestamp: new Date().toISOString(), devices: await collectDeviceStatuses(deviceProviders) });
     const asset = assets.get(path);
     if (!asset) return json(response, 404, { error: "not_found" });
     const [file, contentType] = asset;
