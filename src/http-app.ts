@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { collectSystemStatus } from "./system.js";
 import { collectDeviceStatuses, type DeviceProvider } from "./devices.js";
 import type { ProductService } from "./products.js";
+import type { RuntimeStatus } from "./application/issue-polling-runtime.js";
 
 const defaultPublicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
 const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]]]);
@@ -14,7 +15,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir) {
+export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       if (request.method !== "GET") return json(response, 405, { error: "method_not_allowed" });
@@ -23,6 +24,7 @@ export function createRequestHandler(products: ProductService, devices: DevicePr
       if (path === "/api/system-status") return json(response, 200, await collectSystemStatus());
       if (path === "/api/devices") return json(response, 200, { timestamp: new Date().toISOString(), devices: await collectDeviceStatuses(devices) });
       if (path === "/api/products") return json(response, 200, await products.getProducts());
+      if (path === "/api/runtime" && runtimeStatus) return json(response, 200, runtimeStatus());
       const asset = assets.get(path);
       if (!asset) return json(response, 404, { error: "not_found" });
       const [file, contentType] = asset;
