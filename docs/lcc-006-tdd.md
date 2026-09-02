@@ -57,6 +57,8 @@ npm run canary:worker
 
 Expected final JSON contains `headlessSmoke:"PASS"`, `fixtureCanary:"PASS"`, and only `marker.txt` in `changedFiles`. Until this evidence is captured, `WORK_EXECUTION_ENABLED` must remain `false`.
 
+Windows compatibility policy: durable writes retain temporary-file fsync and atomic rename on every platform. The post-rename directory fsync remains required on platforms that support it; only Windows `EPERM` from that directory-only durability step is treated as an unsupported best-effort operation. Workspace authorization compares canonical filesystem identity, rejects symlink/junction traversal, and compares the canonical Git top-level identity rather than path spelling. Codex is resolved once at worker startup to a validated absolute executable; a Windows npm `codex.cmd` installation is mapped to the fixed adjacent `@openai/codex/bin/codex.js` entrypoint executed by the current absolute Node executable, without a shell command string.
+
 ## Acceptance status before real canary
 
 AC-01–AC-33 and AC-36–AC-37 are covered by T01–T33 and the complete regression/verification commands. AC-34 and AC-35 are `WAITING_HUMAN`: this environment is not the GTX1060 Windows worker service account, so they must not be inferred from fake-process tests. Main merge is prohibited until both canaries pass.

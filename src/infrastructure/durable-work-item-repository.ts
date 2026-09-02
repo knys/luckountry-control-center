@@ -10,6 +10,7 @@ import { evaluateExecutionGate, type AcquireExecutionCommand, type AcquireExecut
 export const CURRENT_SCHEMA_VERSION = 3;
 export const DEFAULT_WORK_ITEM_DATABASE_PATH = "/var/lib/luckountry-control-center/work-items.json";
 export type AtomicFileWriter = (path: string, contents: string) => Promise<void>;
+export type DirectoryDurabilityPolicy = "REQUIRED" | "UNSUPPORTED_BEST_EFFORT";
 
 interface RepositoryData { workItems: WorkItem[]; metadata: SyncMetadata }
 interface Snapshot { schemaVersion: 3; repositories: Record<string, RepositoryData>; execution: ExecutionState }
@@ -136,12 +137,28 @@ export async function atomicWrite(path: string, contents: string): Promise<void>
     await handle.close();
     handle = undefined;
     await rename(temporary, path);
-    const directoryHandle = await openFile(directory, "r");
-    try { await directoryHandle.sync(); } finally { await directoryHandle.close(); }
+    await syncRenamedDirectory(directory);
   } catch (error) {
     if (handle) await handle.close().catch(() => undefined);
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
+  }
+}
+
+export function directoryDurabilityPolicy(platform: NodeJS.Platform = process.platform): DirectoryDurabilityPolicy {
+  return platform === "win32" ? "UNSUPPORTED_BEST_EFFORT" : "REQUIRED";
+}
+
+interface SyncDirectoryHandle { sync(): Promise<void>; close(): Promise<void> }
+export async function syncRenamedDirectory(directory: string, platform: NodeJS.Platform = process.platform, opener: (path:string)=>Promise<SyncDirectoryHandle> = async path => openFile(path,"r")): Promise<void> {
+  let directoryHandle;
+  try {
+    directoryHandle = await opener(directory);
+    await directoryHandle.sync();
+  } catch (error) {
+    if (directoryDurabilityPolicy(platform) !== "UNSUPPORTED_BEST_EFFORT" || !isErrorCode(error, "EPERM")) throw error;
+  } finally {
+    await directoryHandle?.close().catch(() => undefined);
   }
 }
 
@@ -213,6 +230,7 @@ function nullableString(value: unknown): value is string | null { return value =
 function requiredStrings(value: Record<string, unknown>, keys: readonly string[]): boolean { return keys.every((key) => typeof value[key] === "string" && String(value[key]).length > 0); }
 function validateRepositoryName(value: string, path: string): void { if (!value.trim()) throw new DurableRepositoryError(`invalid storage at ${path}: empty repository name`, path); }
 function isNotFound(error: unknown): boolean { return error instanceof Error && "code" in error && error.code === "ENOENT"; }
+function isErrorCode(error: unknown, code: string): boolean { return error instanceof Error && "code" in error && error.code === code; }
 function storageError(message: string, path: string, cause: unknown): DurableRepositoryError { return new DurableRepositoryError(`${message} at ${path}: ${cause instanceof Error ? cause.message : "unknown error"}`, path, { cause }); }
 
 function validNextAction(value: unknown): boolean { const item = record(value); return !!item && ["DEFINE", "EXECUTE", "VERIFY", "RETRY", "WAIT_HUMAN", "WAIT_WORKER", "RESOLVE_BLOCKER", "INVESTIGATE", "NONE", "UNKNOWN"].includes(String(item.kind)) && typeof item.summary === "string" && ["LCC", "CHATGPT", "CODEX", "HUMAN", "EXTERNAL", "NONE", "UNKNOWN"].includes(String(item.ballHolder)) && typeof item.aiExecutable === "boolean" && strings(item.requiredCapabilities); }
