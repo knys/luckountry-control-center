@@ -9,4 +9,5 @@ install -o root -g root -m 0440 ops/luckountry-control-center.sudoers /etc/sudoe
 visudo -cf /etc/sudoers.d/luckountry-control-center
 install -o root -g root -m 0644 ops/luckountry-control-center.service /etc/systemd/system/luckountry-control-center.service
 systemctl daemon-reload
-systemctl enable --now luckountry-control-center.service
+systemctl enable luckountry-control-center.service
+systemctl restart luckountry-control-center.service
