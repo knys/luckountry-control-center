@@ -7,6 +7,7 @@ import { collectDeviceStatuses, type DeviceProvider } from "./devices.js";
 import type { ProductService } from "./products.js";
 import type { RuntimeStatus } from "./application/issue-polling-runtime.js";
 import type { WorkItem } from "./domain/work-item.js";
+import type { ExecutionState } from "./application/execution.js";
 
 const defaultPublicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
 const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]]]);
@@ -16,7 +17,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>) {
+export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>, executions?: () => Promise<ExecutionState>) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       if (request.method !== "GET") return json(response, 405, { error: "method_not_allowed" });
@@ -27,6 +28,7 @@ export function createRequestHandler(products: ProductService, devices: DevicePr
       if (path === "/api/products") return json(response, 200, await products.getProducts());
       if (path === "/api/runtime" && runtimeStatus) return json(response, 200, runtimeStatus());
       if (path === "/api/work-items" && workItems) return json(response, 200, { workItems: await workItems() });
+      if (path === "/api/executions" && executions) return json(response, 200, await executions());
       const asset = assets.get(path);
       if (!asset) return json(response, 404, { error: "not_found" });
       const [file, contentType] = asset;
