@@ -7,7 +7,7 @@ import { delimiter, isAbsolute, join, basename } from "node:path";
 export interface CodexCommand { executable: string; prefixArgs: string[] }
 export interface CodexProbe { version: string; codexReady: boolean; reason: string | null; args: string[]; command: CodexCommand }
 export interface CanaryDiagnostics { codexResolution:{kind:"native"|"node-entrypoint";executable:string;entrypoint:string|null;argv:string[]};headless:{exitCode:number;stdoutTail:string;stderrTail:string;gitStatus:string} }
-const SAFE_CODEX_ARGS=["exec","--json","--color","never","--sandbox","workspace-write","--approve-for-me","-"];
+const SAFE_CODEX_ARGS=["exec","--json","--color","never","--approve-for-me","-"];
 const DIAGNOSTIC_TAIL_LIMIT=2048;
 export async function probeCodex(run: CommandRunner = runCommand, cwd = process.cwd(), environment: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, resolvedCommand?: CodexCommand): Promise<CodexProbe> {
   const command = resolvedCommand ?? await resolveCodexCommand(environment, platform);
@@ -15,9 +15,10 @@ export async function probeCodex(run: CommandRunner = runCommand, cwd = process.
   const version = await run(command.executable, [...command.prefixArgs, "--version"], cwd, undefined, childEnvironment);
   const help = await run(command.executable, [...command.prefixArgs, "exec", "--help"], cwd, undefined, childEnvironment);
   const text = `${help.stdout}\n${help.stderr}`;
-  const supportsJson = /--json\b/.test(text), supportsColor=/--color\b/.test(text), supportsStdin = /stdin|PROMPT|\[PROMPT\]|\s-\b/i.test(text), safeSandbox = /--sandbox\b/.test(text), approve = /--approve-for-me\b/.test(text);
-  const ready = version.code === 0 && help.code === 0 && supportsJson && supportsColor && supportsStdin && safeSandbox && approve;
-  return { version: version.stdout.trim().slice(0, 200), codexReady: ready, reason: ready ? null : "required safe non-interactive Codex flags unavailable", args: approve ? [...SAFE_CODEX_ARGS] : [], command };
+  const supportsJson = /--json\b/.test(text), supportsColor=/--color\b/.test(text), supportsStdin = /stdin|PROMPT|\[PROMPT\]|`-`/i.test(text);
+  const approveProvidesWorkspaceWrite = /--approve-for-me\b[\s\S]{0,300}(?:automatic review[\s\S]{0,100}workspace-write sandbox|workspace-write sandbox[\s\S]{0,100}automatic review)/i.test(text);
+  const ready = version.code === 0 && help.code === 0 && supportsJson && supportsColor && supportsStdin && approveProvidesWorkspaceWrite;
+  return { version: version.stdout.trim().slice(0, 200), codexReady: ready, reason: ready ? null : "required safe non-interactive Codex policy unavailable or unproven", args: ready ? [...SAFE_CODEX_ARGS] : [], command };
 }
 export function buildPrompt(request: ExecutionRequest): string { return `Luckountry Control Center execution.\nRepository: ${request.repository}\nSource work item: ${request.sourceUrl}\nExecution ID: ${request.executionId}\nTask summary: ${request.summary}\n\nRead the referenced GitHub Issue as the SSOT.\nInspect the repository before editing.\nFollow the Issue acceptance/test/evidence requirements.\nDo not weaken acceptance criteria.\nDo not expose secrets.\nUse TDD when the Issue requires it.\nRun required tests/typecheck/build.\nUse normal git workflow and merge to main when all required gates pass and repository policy permits.\nIf a required external/human action is genuinely unavoidable, stop safely and report a structured blocker.\n`; }
 export function safeEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv { const result: NodeJS.ProcessEnv = { NO_COLOR: "1", TERM: "dumb" }; for (const key of ["PATH", "SystemRoot", "WINDIR", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "CODEX_HOME", "OPENAI_API_KEY", "GITHUB_TOKEN"]) { const value=environmentValue(source,key); if(value)result[key]=value; } return result; }
