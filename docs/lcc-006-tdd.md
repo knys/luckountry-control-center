@@ -6,6 +6,8 @@ Issue #12 is the SSOT. The Windows execution worker is separate from `agents/win
 
 On 2026-09-03, `npm test` compiled all source and tests, loaded the new module, and ran the existing LCC-001–005 eleven-suite regression successfully. The new suite alone failed at runtime with `LCC-006 execution scanner not implemented`. This is the valid behavioral RED; no compile/import/runner failure is counted.
 
+During GTX1060 acceptance, Windows exposed a second valid RED: the original npm lifecycle used POSIX-only `rm`, `mkdir -p`, `cp`, and a shell-expanded test glob. A regression contract now rejects POSIX commands, shell chaining, and test globs in the required npm scripts. `tools/tasks.mjs` performs cleanup, asset copying, TypeScript invocation, recursive test discovery, and Node test invocation using Node.js 20 APIs and `spawn(..., shell:false)`.
+
 ## Security and runtime policy
 
 Requests use HMAC-SHA256 over method, path, timestamp, nonce, and SHA-256 body digest. The worker enforces clock skew, one-time nonces, constant-time comparison, and a 64 KiB request limit. The shared secret exists only in protected environment configuration. Production execution is fail-closed and defaults to `WORK_EXECUTION_ENABLED=false` in systemd.

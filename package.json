@@ -5,11 +5,11 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "clean": "rm -rf dist .test-dist",
-    "build": "npm run clean && tsc -p tsconfig.json && mkdir -p dist/public dist/config && cp src/public/index.html src/public/styles.css dist/public/ && cp config/products.json dist/config/",
-    "build:test": "rm -rf .test-dist && tsc -p tsconfig.test.json",
-    "test": "npm run build:test && node --test .test-dist/test/*.test.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "clean": "node tools/tasks.mjs clean",
+    "build": "node tools/tasks.mjs build",
+    "build:test": "node tools/tasks.mjs build-test",
+    "test": "node tools/tasks.mjs test",
+    "typecheck": "node tools/tasks.mjs typecheck",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker/server.js",
     "canary:worker": "node dist/worker/canary.js"

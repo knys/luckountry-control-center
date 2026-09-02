@@ -50,3 +50,4 @@ test("T32 cancel is execution scoped",async()=>{let path="";const fetcher:typeof
 test("T33 observability hides paths and secrets",()=>{assert.doesNotMatch(JSON.stringify(descriptor),/[A-Z]:\\|unit-test-secret/);});
 test("T34 headless_codex_smoke_canary",{skip:process.env.GTX1060_CODEX_CANARY!=="true"},()=>assert.equal(process.platform,"win32"));
 test("T35 fixture_workspace_write_canary",{skip:process.env.GTX1060_CODEX_CANARY!=="true"},()=>assert.equal(process.platform,"win32"));
+test("Windows build contract rejects POSIX-only npm scripts and shell globs",async()=>{const packageJson=JSON.parse(await readFile(join(process.cwd(),"package.json"),"utf8")) as {scripts:Record<string,string>};for(const name of ["clean","build","build:test","test","typecheck"]){const script=packageJson.scripts[name]??"";assert.doesNotMatch(script,/(^|\s)(rm|cp|mkdir)\s|mkdir\s+-p|\*\.test\.js|&&|\|\|/,`${name} must be OS-neutral`);}});
