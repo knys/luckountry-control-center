@@ -45,6 +45,8 @@ if ($ServiceCredential.UserName -notmatch "(?i)\\dev-codex$") { throw "Dedicated
 if ($BindAddress -eq "0.0.0.0" -or $BindAddress -eq "::") { throw "Explicit LAN IPv4 or loopback is required" }
 $parsedAddress = $null
 if (-not [System.Net.IPAddress]::TryParse($BindAddress, [ref]$parsedAddress)) { throw "BindAddress must be an IP address" }
+$nodeExecutable = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+if (-not [System.IO.Path]::IsPathRooted($nodeExecutable) -or -not (Test-Path -LiteralPath $nodeExecutable -PathType Leaf)) { throw "Absolute Node executable is required" }
 
 New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
@@ -59,6 +61,7 @@ $environment = [ordered]@{
     WORKER_VERIFICATION_STATE_PATH = (Join-Path $StateDirectory "verifications.json")
     WORKER_BIND_ADDRESS = $BindAddress
     WORKER_PORT = "$Port"
+    WORKER_NODE_EXECUTABLE = $nodeExecutable
 }
 $environment | ConvertTo-Json | Set-Content -LiteralPath $environmentPath -Encoding UTF8
 $secret = $null
@@ -69,8 +72,10 @@ $runtimeDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configuration = Get-Content -LiteralPath (Join-Path $runtimeDirectory "environment.json") -Raw | ConvertFrom-Json
 foreach ($property in $configuration.PSObject.Properties) { [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, "Process") }
 $installDirectory = Split-Path -Parent $runtimeDirectory
+$nodeExecutable = [string]$configuration.WORKER_NODE_EXECUTABLE
+if (-not [System.IO.Path]::IsPathRooted($nodeExecutable) -or -not (Test-Path -LiteralPath $nodeExecutable -PathType Leaf)) { throw "Configured Node executable is unavailable" }
 Set-Location $installDirectory
-& node.exe (Join-Path $installDirectory "dist\worker\server.js")
+& $nodeExecutable (Join-Path $installDirectory "dist\worker\server.js")
 exit $LASTEXITCODE
 '@
 $bootstrap | Set-Content -LiteralPath $bootstrapPath -Encoding UTF8
@@ -89,9 +94,19 @@ if ($BindAddress -ne "127.0.0.1") {
     New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $BindAddress -LocalPort $Port -RemoteAddress $Tx66kwhAddress -Profile Private | Out-Null
 }
 Start-ScheduledTask -TaskName $TaskName
-Start-Sleep -Seconds 3
-$health = Invoke-RestMethod -Uri "http://$BindAddress`:$Port/v1/health" -TimeoutSec 5
-if ($health.status -ne "ok") { throw "Worker health check failed" }
+$health = $null
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    Start-Sleep -Seconds 1
+    try {
+        $candidate = Invoke-RestMethod -Uri "http://$BindAddress`:$Port/v1/health" -TimeoutSec 2
+        if ($candidate.status -eq "ok") { $health = $candidate; break }
+    } catch {}
+}
+if (-not $health -or $health.status -ne "ok") {
+    $taskInfo = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+    $taskResult = if ($taskInfo) { $taskInfo.LastTaskResult } else { "unknown" }
+    throw "Worker health check failed; scheduled task result=$taskResult"
+}
 $probeEnvironment = Get-Content -LiteralPath $environmentPath -Raw | ConvertFrom-Json
 $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds().ToString()
 $nonce = [Guid]::NewGuid().ToString("N")
