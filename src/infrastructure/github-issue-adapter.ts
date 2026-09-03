@@ -46,7 +46,8 @@ function parseIssue(value: unknown): ExternalIssue | null {
   const parsedLabels = labels.map((label) => typeof label === "string" ? label : object(label)?.name);
   const parsedAssignees = assignees.map((assignee) => object(assignee)?.login);
   if (!parsedLabels.every(string) || !parsedAssignees.every(string)) throw new SyncFailure("INVALID_RESPONSE", "GitHub issue labels or assignees are invalid");
-  return { externalId: String(item.number), title: item.title, state: item.state, labels: parsedLabels as string[], assignees: parsedAssignees as string[], updatedAt: item.updated_at, url: item.html_url };
+  if (item.body !== undefined && item.body !== null && typeof item.body !== "string") throw new SyncFailure("INVALID_RESPONSE", "GitHub issue body is invalid");
+  return { externalId: String(item.number), title: item.title, state: item.state, labels: parsedLabels as string[], assignees: parsedAssignees as string[], updatedAt: item.updated_at, url: item.html_url, body: typeof item.body==="string"?item.body:null };
 }
 
 function responseFailure(response: Response): SyncFailure {

@@ -34,15 +34,18 @@ test("T02 restore_after_repository_recreate", async (context) => {
   assert.deepEqual(await recreated.list(repositoryName), [workItem()]);
 });
 
-test("LCC-005 schema v2 migrates explicitly to v3 without changing WorkItems", async (context) => {
+test("LCC-005 schema v2 migrates explicitly through v4 without changing WorkItems", async (context) => {
   const file = await fixture(); context.after(file.cleanup);
   const original = workItem();
   await writeFile(file.path, `${JSON.stringify({ schemaVersion: 2, repositories: { [repositoryName]: { workItems: [original], metadata: metadata() } } }, null, 2)}\n`, "utf8");
   const repository = await DurableWorkItemRepository.open(file.path);
   assert.deepEqual(await repository.list(repositoryName), [original]);
   assert.deepEqual(await repository.executionState(), { leases: [], records: [] });
-  assert.equal(JSON.parse(await readFile(file.path, "utf8")).schemaVersion, 3);
+  assert.equal(JSON.parse(await readFile(file.path, "utf8")).schemaVersion, 4);
+  assert.deepEqual(await repository.verificationState(),{leases:[],records:[]});
 });
+
+test("LCC-007 schema v3 migration preserves LCC-006 execution state",async context=>{const file=await fixture();context.after(file.cleanup);const execution={leases:[{executionId:"exec",workItemId:workItem().id,repository:repositoryName,workerId:"gtx",acquiredAt:successfulAt,status:"ACTIVE",attempt:1}],records:[{executionId:"exec",workItemId:workItem().id,attempt:1,workerId:"gtx",requestedAt:successfulAt,startedAt:successfulAt,finishedAt:null,resultStatus:"ACTIVE",summary:"running",evidence:[]}]};await writeFile(file.path,JSON.stringify({schemaVersion:3,repositories:{[repositoryName]:{workItems:[workItem()],metadata:metadata()}},execution}));const repository=await DurableWorkItemRepository.open(file.path);assert.deepEqual(await repository.executionState(),execution);assert.deepEqual(await repository.verificationState(),{leases:[],records:[]});assert.equal(JSON.parse(await readFile(file.path,"utf8")).schemaVersion,4);});
 
 test("T03 persist_sync_metadata", async (context) => {
   const file = await fixture(); context.after(file.cleanup);
@@ -99,7 +102,7 @@ test("T07 record_failure_preserves_last_good_state", async (context) => {
 test("T08 initialize_schema_first_run", async (context) => {
   const file = await fixture(); context.after(file.cleanup);
   await DurableWorkItemRepository.open(file.path);
-  assert.deepEqual(JSON.parse(await readFile(file.path, "utf8")), { schemaVersion: CURRENT_SCHEMA_VERSION, repositories: {}, execution: { leases: [], records: [] } });
+  assert.deepEqual(JSON.parse(await readFile(file.path, "utf8")), { schemaVersion: CURRENT_SCHEMA_VERSION, repositories: {}, execution: { leases: [], records: [] },verification:{leases:[],records:[]} });
 });
 
 test("T09 schema_initialization_idempotent", async (context) => {

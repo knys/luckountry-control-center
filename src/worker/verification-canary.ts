@@ -1,0 +1,41 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { DurableWorkItemRepository } from "../infrastructure/durable-work-item-repository.js";
+import type { WorkItem } from "../domain/work-item.js";
+import type { ExecutionResult, RepositoryExecutionTarget, WorkerDescriptor } from "../application/execution.js";
+import { VerificationService, type RepositoryVerificationTarget } from "../application/verification.js";
+import { runVerification, type VerificationProfile } from "./verifier.js";
+import { runCommand } from "./workspace.js";
+
+const directory = await mkdtemp(join(tmpdir(), "lcc-verification-canary-"));
+try {
+  for (const args of [["init"], ["config", "user.email", "canary@localhost"], ["config", "user.name", "LCC Canary"]]) await runCommand("git", args, directory);
+  await writeFile(join(directory, "README.md"), "isolated fixture\n");
+  await writeFile(join(directory, ".gitignore"), "state.json\n.state.json.*.tmp\n");
+  await runCommand("git", ["add", "README.md", ".gitignore"], directory);
+  await runCommand("git", ["commit", "-m", "fixture"], directory);
+  const repository = await DurableWorkItemRepository.open(join(directory, "state.json"));
+  const name = "fixture/verification-canary";
+  const now = new Date().toISOString();
+  const work: WorkItem = { id: "canary-work", source: { provider: "synthetic", repository: name, externalId: "1" }, title: "Verification canary", sourceState: "open", labels: [], assignees: [], sourceUrl: "https://github.com/fixture/verification-canary/issues/1", workState: "READY", ballHolder: "CODEX", nextAction: { kind: "EXECUTE", summary: "create marker", ballHolder: "CODEX", aiExecutable: true, requiredCapabilities: ["CODE_EDIT"] }, blocker: null, acceptanceCriteria: ["AC-01 [AUTO:fixture] fixed check passes"], evidence: [], sourceUpdatedAt: now, lastSyncedAt: now, transitionReason: "synthetic fixture" };
+  const worker: WorkerDescriptor = { workerId: "local-canary", status: "ONLINE", capabilities: ["CODE_EDIT", "TEST"], workspaceIds: ["canary"], executorKinds: ["CODEX", "VERIFICATION"], verificationProfiles: { "canary-fixed": ["fixture"] } };
+  const executionTarget: RepositoryExecutionTarget = { repository: name, workerId: worker.workerId, workspaceId: "canary", requiredCapabilities: ["CODE_EDIT"], concurrency: "EXCLUSIVE_REPOSITORY" };
+  await repository.commitSync(name, [work], { status: "SUCCEEDED", lastAttemptedSyncAt: now, lastSuccessfulSyncAt: now, failureReason: null, failureType: null, resetAt: null, retryAfter: null });
+  await repository.acquireExecution({ executionId: "canary-execution", workItemId: work.id, target: executionTarget, worker, requestedAt: now, shuttingDown: false });
+  await writeFile(join(directory, "marker.txt"), "LCC_VERIFICATION_FIXTURE_OK\n");
+  await runCommand("git", ["add", "marker.txt"], directory);
+  await runCommand("git", ["commit", "-m", "synthetic execution output"], directory);
+  const execution: ExecutionResult = { executionId: "canary-execution", status: "SUCCEEDED", startedAt: now, finishedAt: new Date().toISOString(), summary: "Synthetic execution completed", evidence: [], retryable: false };
+  await repository.completeExecution(execution.executionId, execution, { type: "EXECUTION_COMPLETED", verification: "AUTOMATED" });
+  const before = (await repository.findWorkItem(work.id))?.workState;
+  const checkScript = fileURLToPath(new URL("./verification-canary-check.js", import.meta.url));
+  const profile: VerificationProfile = { profileId: "canary-fixed", checks: { fixture: { executable: process.execPath, args: [checkScript], timeoutMs: 60_000 } } };
+  const verificationTarget: RepositoryVerificationTarget = { repository: name, workerId: worker.workerId, workspaceId: "canary", profileId: profile.profileId, checkIds: ["fixture"] };
+  const service = new VerificationService(repository, [verificationTarget], { get: async () => worker }, { execute: request => runVerification(request, { workspaceId: "canary", repository: name, path: directory, capabilities: ["TEST"] }, profile) }, Date.now, () => "canary-verification");
+  await service.verify(work.id);
+  const after = await repository.findWorkItem(work.id), record = (await repository.verificationState()).records[0];
+  if (before !== "VERIFYING" || after?.workState !== "DONE" || record?.status !== "PASSED" || record.checks[0]?.status !== "PASSED" || !record.verifiedHead) throw new Error("verification canary contract failed");
+  console.log(JSON.stringify({ fixedVerification: "PASS", evidenceReturned: record.checks[0].evidence.slice(0, 2), statePath: ["RUNNING", "VERIFYING", "DONE"], durableVerification: "PASS", changedFiles: ["marker.txt"] }));
+} finally { await rm(directory, { recursive: true, force: true }); }

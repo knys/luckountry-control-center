@@ -23,4 +23,4 @@ export class InMemoryWorkItemRepository implements WorkItemRepository {
   }
 }
 
-function mergeExecution(source: WorkItem, current?: WorkItem): WorkItem { return current ? { ...source, workState: current.workState, ballHolder: current.ballHolder, nextAction: structuredClone(current.nextAction), blocker: current.blocker, acceptanceCriteria: [...current.acceptanceCriteria], evidence: [...current.evidence], transitionReason: current.transitionReason } : source; }
+function mergeExecution(source: WorkItem, current?: WorkItem): WorkItem { return current ? { ...source, workState: current.workState, ballHolder: current.ballHolder, nextAction: structuredClone(current.nextAction), blocker: current.blocker, acceptanceCriteria: [...source.acceptanceCriteria], evidence: [...current.evidence], transitionReason: current.transitionReason } : source; }

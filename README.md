@@ -34,6 +34,8 @@ The LCC-005 execution gate requires the complete READY/CODEX/EXECUTE policy, dec
 
 LCC-006 adds an HMAC-authenticated Windows execution worker on loopback port 9200, explicit worker-local workspace allowlists, durable execution idempotency, remote adapters, and restart reconciliation. Automatic production execution remains fail-closed: `WORK_EXECUTION_ENABLED=false` is the default, and missing target, HMAC, worker, workspace, or safe Codex readiness prevents dispatch. See `docs/lcc-006-tdd.md` before configuring the worker or running its isolated fixture canary.
 
+LCC-007 ingests normalized Acceptance Criteria from GitHub Issue bodies and turns allowlisted AUTO check IDs into fixed worker-local verification commands, durable criterion evidence, and deterministic state transitions. Production verification is independently fail-closed with `WORK_VERIFICATION_ENABLED=false`. Configure `WORK_VERIFICATION_TARGETS_JSON` on LCC and `WORKER_VERIFICATION_PROFILES_CONFIG` plus `WORKER_VERIFICATION_STATE_PATH` on the worker; executable paths in profiles are canonicalized and validated at startup. Run `npm run canary:verification` under the Windows worker account for the isolated AC-31/32 bridge described in `docs/lcc-007-tdd.md`.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:

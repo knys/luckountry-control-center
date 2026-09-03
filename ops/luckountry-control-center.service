@@ -13,6 +13,7 @@ Environment=HOST=0.0.0.0
 Environment=PORT=3000
 Environment=WORK_ITEM_DATABASE_PATH=/var/lib/luckountry-control-center/work-items.json
 Environment=WORK_EXECUTION_ENABLED=false
+Environment=WORK_VERIFICATION_ENABLED=false
 EnvironmentFile=-/etc/luckountry-control-center/environment
 ExecStart=/usr/bin/node /opt/luckountry-control-center/dist/server.js
 Restart=on-failure

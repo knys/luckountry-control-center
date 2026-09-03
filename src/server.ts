@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createDeviceProviders } from "./devices.js";
 import { GhCliMetadataProvider, parseProductsManifest, ProductService } from "./products.js";
 import { createRequestHandler } from "./http-app.js";
-import { composeExecutionRuntime, composeIssueRuntime } from "./composition.js";
+import { composeExecutionRuntime, composeIssueRuntime,composeVerificationRuntime } from "./composition.js";
 import { discoverRepositories } from "./composition.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
@@ -17,11 +17,13 @@ const productService = new ProductService(manifest, new GhCliMetadataProvider())
 const issueRuntime = await composeIssueRuntime(manifest);
 const repositories = discoverRepositories(manifest);
 const executionRuntime = issueRuntime.repository.acquireExecution ? await composeExecutionRuntime(issueRuntime.repository as Required<typeof issueRuntime.repository>, repositories) : null;
-const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined));
+const verificationRuntime=issueRuntime.repository.acquireVerification?await composeVerificationRuntime(issueRuntime.repository as Required<typeof issueRuntime.repository>,repositories):null;
+const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined,issueRuntime.repository.verificationState?()=>issueRuntime.repository.verificationState!():undefined));
 
 server.listen(port, host, () => console.log(`Luckountry Control Center listening on http://${host}:${port}`));
 issueRuntime.runtime.start();
 executionRuntime?.scanner.start();
+verificationRuntime?.scanner.start();
 
 let shutdownStarted = false;
 async function shutdown(): Promise<void> {
@@ -29,6 +31,7 @@ async function shutdown(): Promise<void> {
   shutdownStarted = true;
   await issueRuntime.runtime.stop();
   await executionRuntime?.scanner.stop();
+  await verificationRuntime?.scanner.stop();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
 function handleSignal(): void {
