@@ -3,4 +3,5 @@ dist/
 .test-dist/
 .env
 *.log
+.worker-runtime/
 .DS_Store
