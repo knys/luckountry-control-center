@@ -49,6 +49,19 @@ if (-not [System.Net.IPAddress]::TryParse($BindAddress, [ref]$parsedAddress)) { 
 if (-not $NodeExecutable) { throw "NodeExecutable is required for install" }
 if (-not [System.IO.Path]::IsPathRooted($NodeExecutable) -or -not (Test-Path -LiteralPath $NodeExecutable -PathType Leaf)) { throw "NodeExecutable must be an existing absolute file path" }
 $nodeExecutable = (Resolve-Path -LiteralPath $NodeExecutable).Path
+$account = $ServiceCredential.UserName
+$workspaceManifest = Get-Content -LiteralPath $WorkspaceConfig -Raw | ConvertFrom-Json
+if ($workspaceManifest.version -ne 1 -or -not $workspaceManifest.workspaces) { throw "Workspace allowlist is invalid" }
+foreach ($workspace in @($workspaceManifest.workspaces)) {
+    $workspacePath = [string]$workspace.path
+    if (-not [System.IO.Path]::IsPathRooted($workspacePath) -or -not (Test-Path -LiteralPath $workspacePath -PathType Container)) { throw "Workspace path is unavailable" }
+    icacls.exe $workspacePath /setowner $account /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to set workspace owner" }
+    icacls.exe $workspacePath /grant:r "${account}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to grant workspace access" }
+    $owner = (Get-Acl -LiteralPath $workspacePath).Owner
+    if ($owner -ne $account) { throw "Workspace owner must match worker account" }
+}
 
 New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
@@ -82,7 +95,6 @@ exit $LASTEXITCODE
 '@
 $bootstrap | Set-Content -LiteralPath $bootstrapPath -Encoding UTF8
 
-$account = $ServiceCredential.UserName
 icacls.exe $runtimeDirectory /inheritance:r /grant:r "${account}:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
 $taskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File `"$bootstrapPath`""
 $trigger = New-ScheduledTaskTrigger -AtStartup
