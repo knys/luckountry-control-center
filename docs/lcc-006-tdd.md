@@ -61,6 +61,8 @@ Windows compatibility policy: durable writes retain temporary-file fsync and ato
 
 The canary invokes `codex exec` with JSONL output, color disabled, the probed automatic-review workspace-write policy, and the prompt on stdin. Headless success requires the final completed `agent_message` to equal the expected marker and a clean Git status. Failures emit only bounded, credential-redacted stdout/stderr tails, Git status, safe argv, and executable kind/basename; full paths and environments are not printed.
 
+Fixture success remains strict: Codex must report success, `marker.txt` must contain `LCC_FIXTURE_OK`, and the NUL-delimited Git porcelain result must name only `marker.txt`. Fixture failures report bounded and credential-redacted execution status, exit code, summary, evidence, final agent message, marker checks, and expected versus actual changed filenames; missing marker files become diagnostics rather than masking the underlying failure.
+
 ## Acceptance status before real canary
 
 AC-01–AC-33 and AC-36–AC-37 are covered by T01–T33 and the complete regression/verification commands. AC-34 and AC-35 are `WAITING_HUMAN`: this environment is not the GTX1060 Windows worker service account, so they must not be inferred from fake-process tests. Main merge is prohibited until both canaries pass.
