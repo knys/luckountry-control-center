@@ -18,3 +18,4 @@ test("T06 unavailable_worker_is_not_dispatched", () => { for (const status of ["
 test("T07 active_work_item_lease_prevents_duplicate", () => assert.equal(evaluateExecutionGate(readyItem(), target, worker, state([active()]), false).status, "ALREADY_RUNNING"));
 test("T08 exclusive_repository_lease_prevents_parallel_edit", () => assert.equal(evaluateExecutionGate(readyItem(), target, worker, state([active({ workItemId: "other" })]), false).status, "ALREADY_RUNNING"));
 test("shutdown is ineligible", () => assert.equal(evaluateExecutionGate(readyItem(), target, worker, state(), true).status, "REJECTED"));
+test("R07 canonical RETRYING work is execution eligible",()=>assert.equal(evaluateExecutionGate(readyItem({workState:"RETRYING",ballHolder:"LCC",nextAction:{kind:"RETRY",summary:"Retry failed work",ballHolder:"LCC",aiExecutable:true,requiredCapabilities:["CODE_EDIT"]}}),target,worker,state(),false).status,"ELIGIBLE"));

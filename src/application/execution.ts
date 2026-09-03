@@ -7,7 +7,7 @@ export type GateStatus = "ELIGIBLE" | "WAITING_WORKER" | "REJECTED" | "ALREADY_R
 export interface RepositoryExecutionTarget { repository: string; workerId: string; workspaceId: string; requiredCapabilities: string[]; concurrency: "EXCLUSIVE_REPOSITORY" }
 export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; verificationProfiles?:Record<string,string[]>; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
 export interface ExecutionLease { executionId: string; workItemId: string; repository: string; workerId: string; acquiredAt: string; status: "ACTIVE" | "COMPLETED" | "ABANDONED"; attempt: number }
-export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[]; baseHead?:string;candidateBranch?:string;candidateHead?:string }
+export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[]; retryable?:boolean;baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export interface ExecutionState { leases: ExecutionLease[]; records: ExecutionRecord[] }
 export interface GateDecision { status: GateStatus; reason: string; target: RepositoryExecutionTarget | null; worker: WorkerDescriptor | null }
 export interface ExecutionRequest { executionId: string; workItemId: string; repository: string; workspaceId: string; actionKind: "EXECUTE"; summary: string; requiredCapabilities: string[]; sourceUrl: string;pilot?:{cycleId:string;externalId:string;baseBranch:string;candidateBranch:string} }
@@ -28,7 +28,9 @@ export function evaluateExecutionGate(workItem: WorkItem, target: RepositoryExec
   if (shuttingDown) return rejected("execution service is shutting down");
   if (!target || target.repository !== workItem.source.repository) return rejected("repository is not uniquely allowlisted");
   if (state.leases.some((lease) => lease.status === "ACTIVE" && (lease.workItemId === workItem.id || lease.repository === target.repository))) return { status: "ALREADY_RUNNING", reason: "an active exclusive lease exists", target, worker };
-  if (workItem.workState !== "READY" || workItem.ballHolder !== "CODEX" || workItem.nextAction.kind !== "EXECUTE" || !workItem.nextAction.aiExecutable) return rejected("WorkItem execution state is not eligible");
+  const retry=workItem.workState==="RETRYING"&&workItem.ballHolder==="LCC"&&workItem.nextAction.kind==="RETRY";
+  const ready=workItem.workState==="READY"&&workItem.ballHolder==="CODEX"&&workItem.nextAction.kind==="EXECUTE";
+  if ((!ready&&!retry) || !workItem.nextAction.aiExecutable) return rejected("WorkItem execution state is not eligible");
   if (workItem.nextAction.requiredCapabilities.length === 0) return rejected("required capabilities are empty");
   if (!worker || worker.workerId !== target.workerId) return { status: "WAITING_WORKER", reason: "configured worker is unavailable", target, worker };
   if (worker.status !== "ONLINE") return { status: "WAITING_WORKER", reason: `worker is ${worker.status}`, target, worker };

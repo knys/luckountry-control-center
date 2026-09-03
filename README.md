@@ -38,6 +38,8 @@ LCC-007 ingests normalized Acceptance Criteria from GitHub Issue bodies and turn
 
 LCC-008 adds a controlled one-Issue pilot. Dispatch requires `WORK_AUTOMATION_MODE=pilot`, both existing enable flags, one exact unexpired `WORK_PILOT_SCOPE_JSON`, a ready worker/profile, deterministic Issue definition markers, and both pilot labels. Candidate work is committed only on a worker-allowlisted `lcc/pilot/*` branch with push disabled; matching independent evidence ends in `WAITING_HUMAN`, never automatic promotion. Defaults remain disabled. See `config/pilot-scope.example.json`, `docs/lcc-008-tdd.md`, and run `npm run canary:pilot` before real acceptance.
 
+A failed Pilot is never retried automatically. For a retryable pre-Codex infrastructure/setup failure only, a Human may set `WORK_PILOT_RECOVERY_ID` to the exact existing `cycleId`. LCC durably consumes that one-shot request, performs `FAILED -> RETRYING -> RUNNING`, and grants one additional dispatch without resetting history or counters. Remove the setting after consumption; it cannot be reused after restart.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:
