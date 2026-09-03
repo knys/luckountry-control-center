@@ -1,0 +1,10 @@
+[
+  {
+    "profileId": "node-standard",
+    "checks": {
+      "test": { "executable": "C:\\Program Files\\nodejs\\node.exe", "args": ["tools/tasks.mjs", "test"], "timeoutMs": 600000 },
+      "typecheck": { "executable": "C:\\Program Files\\nodejs\\node.exe", "args": ["tools/tasks.mjs", "typecheck"], "timeoutMs": 300000 },
+      "build": { "executable": "C:\\Program Files\\nodejs\\node.exe", "args": ["tools/tasks.mjs", "build"], "timeoutMs": 600000 }
+    }
+  }
+]

@@ -7,6 +7,10 @@ import { ExecutionService, type ExecutionRepository, type RepositoryExecutionTar
 import { ExecutionScanner, workExecutionEnabled } from "./application/execution-scanner.js";
 import { RemoteCodexExecutor, RemoteWorkerRegistry, type RemoteWorkerConfig } from "./infrastructure/remote-execution.js";
 import { ExecutionReconciler } from "./application/execution-reconciler.js";
+import { VerificationService,type RepositoryVerificationTarget,type VerificationRepository } from "./application/verification.js";
+import { VerificationScanner,workVerificationEnabled } from "./application/verification-scanner.js";
+import { VerificationReconciler } from "./application/verification-reconciler.js";
+import { RemoteVerificationExecutor } from "./infrastructure/remote-execution.js";
 
 export function discoverRepositories(manifest: ProductsManifest): string[] {
   return [...new Set(manifest.products.flatMap((product) => product.repository ? [product.repository] : []))];
@@ -18,15 +22,17 @@ export interface CompositionDependencies {
   scheduler?: Scheduler;
 }
 
-export interface IssueRuntimeComposition { repository: WorkItemRepository & Partial<ExecutionRepository>; adapter: GitHubIssueAdapter | IssueSource; syncService: IssueSyncService; runtime: IssuePollingRuntime }
+export interface IssueRuntimeComposition { repository: WorkItemRepository & Partial<ExecutionRepository&VerificationRepository>; adapter: GitHubIssueAdapter | IssueSource; syncService: IssueSyncService; runtime: IssuePollingRuntime }
 
 export async function composeIssueRuntime(manifest: ProductsManifest, environment: NodeJS.ProcessEnv = process.env, dependencies: CompositionDependencies = {}): Promise<IssueRuntimeComposition> {
   const repository = await (dependencies.openRepository ?? DurableWorkItemRepository.open)(workItemDatabasePath(environment));
   const adapter = dependencies.source ?? new GitHubIssueAdapter(fetch, environment.GITHUB_TOKEN);
   const syncService = new IssueSyncService(adapter, repository);
   const runtime = new IssuePollingRuntime(discoverRepositories(manifest), syncService, pollIntervalFromEnvironment(environment), dependencies.scheduler);
-  return { repository: repository as WorkItemRepository & Partial<ExecutionRepository>, adapter, syncService, runtime };
+  return { repository: repository as WorkItemRepository & Partial<ExecutionRepository&VerificationRepository>, adapter, syncService, runtime };
 }
+export interface VerificationRuntimeComposition{service:VerificationService;scanner:VerificationScanner;reconciler:VerificationReconciler}
+export async function composeVerificationRuntime(repository:WorkItemRepository&ExecutionRepository&VerificationRepository,repositories:readonly string[],environment:NodeJS.ProcessEnv=process.env):Promise<VerificationRuntimeComposition|null>{if(!workVerificationEnabled(environment))return null;const workerId=environment.WORKER_ID?.trim(),baseUrl=environment.WORKER_URL?.trim(),keyId=environment.WORKER_HMAC_KEY_ID?.trim(),secret=environment.WORKER_HMAC_SECRET;let targets:RepositoryVerificationTarget[];try{targets=JSON.parse(environment.WORK_VERIFICATION_TARGETS_JSON??"") as RepositoryVerificationTarget[];}catch{return null;}if(!workerId||!baseUrl||!keyId||!secret||!Array.isArray(targets)||!targets.length||targets.some(target=>!repositories.includes(target.repository)||target.workerId!==workerId||!target.workspaceId||!target.profileId||!Array.isArray(target.checkIds)||!target.checkIds.length))return null;const remotes:RemoteWorkerConfig[]=[{workerId,baseUrl,credentials:{keyId,secret}}],registry=new RemoteWorkerRegistry(remotes),executor=new RemoteVerificationExecutor(remotes,name=>targets.find(target=>target.repository===name)?.workerId??null),service=new VerificationService(repository,targets,registry,executor),scanner=new VerificationScanner(repository,service,true,async()=>(await Promise.all(repositories.map(name=>repository.list(name)))).flat().filter(item=>item.workState==="VERIFYING").map(item=>item.id)),reconciler=new VerificationReconciler(repository,executor);await reconciler.reconcile();return{service,scanner,reconciler};}
 
 export interface ExecutionRuntimeComposition { service: ExecutionService; scanner: ExecutionScanner; reconciler: ExecutionReconciler }
 export async function composeExecutionRuntime(repository: WorkItemRepository & ExecutionRepository, repositories: readonly string[], environment: NodeJS.ProcessEnv = process.env): Promise<ExecutionRuntimeComposition | null> {

@@ -22,7 +22,7 @@ test("T01 fetch_open_issues", async () => {
   });
   const result = await adapter.fetchOpenIssues("knys/repo");
   assert.match(requested, /repos\/knys\/repo\/issues\?state=open/);
-  assert.deepEqual(result, [{ externalId: "1", title: "Issue", state: "open", labels: ["feature"], assignees: ["knys"], updatedAt: "2026-09-02T12:00:00Z", url: "https://github.com/knys/repo/issues/1" }]);
+  assert.deepEqual(result, [{ externalId: "1", title: "Issue", state: "open", labels: ["feature"], assignees: ["knys"], updatedAt: "2026-09-02T12:00:00Z", url: "https://github.com/knys/repo/issues/1",body:null }]);
 });
 
 test("T02 map_issue_fields", async () => {
@@ -126,3 +126,6 @@ test("repository commit is atomic when persistence throws", async () => {
   await assert.rejects(new IssueSyncService(source(), failing, clock).sync(repositoryName));
   assert.equal((await backing.list(repositoryName))[0]?.source.externalId, "9");
 });
+
+test("LCC-007 V01 GitHub body is fetched and Acceptance is ingested",async()=>{const adapter=new GitHubIssueAdapter(async()=>new Response(JSON.stringify([{number:14,title:"Verify",state:"open",labels:[],assignees:[],updated_at:issue().updatedAt,html_url:issue().url,body:"## Acceptance Criteria\n- [x] AC-01 [AUTO:test] tests"}]),{status:200}));const {service}=sync(adapter);const [item]=await service.sync(repositoryName);assert.deepEqual(item?.acceptanceCriteria,["AC-01 [AUTO:test] tests"]);});
+test("LCC-007 V06 source Acceptance updates without losing execution state or evidence",async()=>{let body="## Acceptance Criteria\n- [ ] AC-01 [AUTO:test] old";const provider:IssueSource={fetchOpenIssues:async()=>[issue({body})]};const {service,repository}=sync(provider);const [first]=await service.sync(repositoryName);await repository.transitionExecutionState(first!.id,item=>({...item,workState:"RUNNING",ballHolder:"CODEX",evidence:["execution"]}));body="## Acceptance Criteria\n- [ ] AC-02 [AUTO:build] new";const [updated]=await service.sync(repositoryName);assert.deepEqual(updated?.acceptanceCriteria,["AC-02 [AUTO:build] new"]);assert.equal(updated?.workState,"RUNNING");assert.deepEqual(updated?.evidence,["execution"]);});

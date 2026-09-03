@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 export type GateStatus = "ELIGIBLE" | "WAITING_WORKER" | "REJECTED" | "ALREADY_RUNNING";
 export interface RepositoryExecutionTarget { repository: string; workerId: string; workspaceId: string; requiredCapabilities: string[]; concurrency: "EXCLUSIVE_REPOSITORY" }
-export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
+export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; verificationProfiles?:Record<string,string[]>; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
 export interface ExecutionLease { executionId: string; workItemId: string; repository: string; workerId: string; acquiredAt: string; status: "ACTIVE" | "COMPLETED" | "ABANDONED"; attempt: number }
 export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[] }
 export interface ExecutionState { leases: ExecutionLease[]; records: ExecutionRecord[] }

@@ -13,6 +13,7 @@
     "start": "node dist/server.js",
     "start:worker": "node dist/worker/server.js",
     "canary:worker": "node dist/worker/canary.js"
+    ,"canary:verification": "node dist/worker/verification-canary.js"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
