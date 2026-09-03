@@ -7,6 +7,7 @@ param(
     [string]$StateDirectory,
     [PSCredential]$ServiceCredential,
     [SecureString]$HmacSecret,
+    [string]$NodeExecutable,
     [string]$WorkerId = "gtx1060",
     [string]$HmacKeyId = "lcc",
     [string]$BindAddress = "127.0.0.1",
@@ -45,8 +46,9 @@ if ($ServiceCredential.UserName -notmatch "(?i)\\dev-codex$") { throw "Dedicated
 if ($BindAddress -eq "0.0.0.0" -or $BindAddress -eq "::") { throw "Explicit LAN IPv4 or loopback is required" }
 $parsedAddress = $null
 if (-not [System.Net.IPAddress]::TryParse($BindAddress, [ref]$parsedAddress)) { throw "BindAddress must be an IP address" }
-$nodeExecutable = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
-if (-not [System.IO.Path]::IsPathRooted($nodeExecutable) -or -not (Test-Path -LiteralPath $nodeExecutable -PathType Leaf)) { throw "Absolute Node executable is required" }
+if (-not $NodeExecutable) { throw "NodeExecutable is required for install" }
+if (-not [System.IO.Path]::IsPathRooted($NodeExecutable) -or -not (Test-Path -LiteralPath $NodeExecutable -PathType Leaf)) { throw "NodeExecutable must be an existing absolute file path" }
+$nodeExecutable = (Resolve-Path -LiteralPath $NodeExecutable).Path
 
 New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
