@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 export type GateStatus = "ELIGIBLE" | "WAITING_WORKER" | "REJECTED" | "ALREADY_RUNNING";
 export interface RepositoryExecutionTarget { repository: string; workerId: string; workspaceId: string; requiredCapabilities: string[]; concurrency: "EXCLUSIVE_REPOSITORY" }
-export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[] }
+export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
 export interface ExecutionLease { executionId: string; workItemId: string; repository: string; workerId: string; acquiredAt: string; status: "ACTIVE" | "COMPLETED" | "ABANDONED"; attempt: number }
 export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[] }
 export interface ExecutionState { leases: ExecutionLease[]; records: ExecutionRecord[] }
@@ -31,6 +31,7 @@ export function evaluateExecutionGate(workItem: WorkItem, target: RepositoryExec
   if (workItem.nextAction.requiredCapabilities.length === 0) return rejected("required capabilities are empty");
   if (!worker || worker.workerId !== target.workerId) return { status: "WAITING_WORKER", reason: "configured worker is unavailable", target, worker };
   if (worker.status !== "ONLINE") return { status: "WAITING_WORKER", reason: `worker is ${worker.status}`, target, worker };
+  if (worker.codexReady === false) return { status: "WAITING_WORKER", reason: "worker Codex runtime is not ready", target, worker };
   if (!worker.workspaceIds.includes(target.workspaceId) || !worker.executorKinds.includes("CODEX")) return { status: "WAITING_WORKER", reason: "worker cannot handle workspace or executor kind", target, worker };
   const requirements = new Set([...workItem.nextAction.requiredCapabilities, ...target.requiredCapabilities]);
   if ([...requirements].some((capability) => !worker.capabilities.includes(capability))) return { status: "WAITING_WORKER", reason: "worker capabilities do not satisfy requirements", target, worker };

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { DurableRepositoryError, DurableWorkItemRepository, CURRENT_SCHEMA_VERSION, DEFAULT_WORK_ITEM_DATABASE_PATH, workItemDatabasePath, type AtomicFileWriter } from "../src/infrastructure/durable-work-item-repository.js";
+import { DurableRepositoryError, DurableWorkItemRepository, CURRENT_SCHEMA_VERSION, DEFAULT_WORK_ITEM_DATABASE_PATH, directoryDurabilityPolicy, syncRenamedDirectory, workItemDatabasePath, type AtomicFileWriter } from "../src/infrastructure/durable-work-item-repository.js";
 import { IssueSyncService, type ExternalIssue, type IssueSource } from "../src/application/issue-sync-service.js";
 import type { SyncMetadata, WorkItem } from "../src/domain/work-item.js";
 
@@ -152,4 +152,16 @@ test("recordFailure remains atomic on write failure", async (context) => {
   const failing = await DurableWorkItemRepository.open(file.path, async () => { throw new Error("write failed"); });
   await assert.rejects(failing.recordFailure(repositoryName, metadata({ status: "FAILED", failureType: "NETWORK", failureReason: "offline" })), /write failed/);
   assert.deepEqual(await (await DurableWorkItemRepository.open(file.path)).metadata(repositoryName), metadata());
+});
+
+test("Windows directory durability ignores only unsupported directory fsync EPERM", async () => {
+  assert.equal(directoryDurabilityPolicy("win32"), "UNSUPPORTED_BEST_EFFORT");
+  assert.equal(directoryDurabilityPolicy("linux"), "REQUIRED");
+  let closed = false;
+  const eperm = Object.assign(new Error("unsupported"), { code: "EPERM" });
+  await syncRenamedDirectory("C:\\state", "win32", async () => ({ sync: async () => { throw eperm; }, close: async () => { closed = true; } }));
+  assert.equal(closed, true);
+  await assert.rejects(syncRenamedDirectory("/state", "linux", async () => ({ sync: async () => { throw eperm; }, close: async () => undefined })), /unsupported/);
+  const eio = Object.assign(new Error("disk failure"), { code: "EIO" });
+  await assert.rejects(syncRenamedDirectory("C:\\state", "win32", async () => ({ sync: async () => { throw eio; }, close: async () => undefined })), /disk failure/);
 });
