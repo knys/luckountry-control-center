@@ -36,6 +36,12 @@ LCC-006 adds an HMAC-authenticated Windows execution worker on loopback port 920
 
 LCC-007 ingests normalized Acceptance Criteria from GitHub Issue bodies and turns allowlisted AUTO check IDs into fixed worker-local verification commands, durable criterion evidence, and deterministic state transitions. Production verification is independently fail-closed with `WORK_VERIFICATION_ENABLED=false`. Configure `WORK_VERIFICATION_TARGETS_JSON` on LCC and `WORKER_VERIFICATION_PROFILES_CONFIG` plus `WORKER_VERIFICATION_STATE_PATH` on the worker; executable paths in profiles are canonicalized and validated at startup. Run `npm run canary:verification` under the Windows worker account for the isolated AC-31/32 bridge described in `docs/lcc-007-tdd.md`.
 
+LCC-008 adds a controlled one-Issue pilot. Dispatch requires `WORK_AUTOMATION_MODE=pilot`, both existing enable flags, one exact unexpired `WORK_PILOT_SCOPE_JSON`, a ready worker/profile, deterministic Issue definition markers, and both pilot labels. Candidate work is committed only on a worker-allowlisted `lcc/pilot/*` branch with push disabled; matching independent evidence ends in `WAITING_HUMAN`, never automatic promotion. Defaults remain disabled. See `config/pilot-scope.example.json`, `docs/lcc-008-tdd.md`, and run `npm run canary:pilot` before real acceptance.
+
+A failed Pilot is never retried automatically. For a retryable pre-Codex infrastructure/setup failure only, a Human may set `WORK_PILOT_RECOVERY_ID` to the exact existing `cycleId`. LCC durably consumes that one-shot request, performs `FAILED -> RETRYING -> RUNNING`, and grants one additional dispatch without resetting history or counters. Remove the setting after consumption; it cannot be reused after restart.
+
+After that Recovery has been consumed, a later Codex/postcondition failure requires a separate Human remediation approval: `WORK_PILOT_REMEDIATION_ID=<cycleId>:<latest-failed-executionId>`. It is exact, durable, one-shot, and adds at most one further dispatch without resetting either prior attempt. Pilot success requires a clean committed candidate descendant with the base unchanged; Codex final messages and failed git postconditions remain as bounded/redacted evidence. The Worker owns execution for 30 minutes and the Controller observes for 31 minutes before an execution-scoped cancel/final-status sequence.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:

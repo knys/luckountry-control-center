@@ -5,7 +5,9 @@
       "workspaceId": "luckountry-control-center",
       "repository": "knys/luckountry-control-center",
       "path": "D:\\Workspaces\\luckountry-control-center",
-      "capabilities": ["CODE_EDIT", "GIT", "NODE20"]
+      "capabilities": ["CODE_EDIT", "GIT", "NODE20"],
+      "pilotBaseBranch": "main",
+      "promotionDisabled": true
     }
   ]
 }

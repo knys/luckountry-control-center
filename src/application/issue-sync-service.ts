@@ -1,6 +1,7 @@
 import type { FailureType, SyncMetadata, WorkItem } from "../domain/work-item.js";
 import { safeInitialExecution } from "../domain/work-state-machine.js";
 import { extractAcceptanceCriteria } from "../domain/verification.js";
+import { definitionReady } from "../domain/pilot.js";
 
 export interface ExternalIssue {
   externalId: string;
@@ -62,6 +63,7 @@ export class IssueSyncService {
           nextAction: structuredClone(prior?.nextAction ?? initial.nextAction),
           blocker: prior?.blocker ?? null,
           acceptanceCriteria: extractAcceptanceCriteria(external.body),
+          ...(external.body == null ? {} : { definitionReady: definitionReady(external.body) }),
           evidence: [...(prior?.evidence ?? [])],
           sourceUpdatedAt: external.updatedAt,
           lastSyncedAt: attemptedAt
