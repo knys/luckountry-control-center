@@ -75,3 +75,48 @@ explicit, durable, and bounded.
 | R18 | Read-only observability is bounded and excludes secrets, paths, environment, and HMAC material |
 | R19 | LCC-001 through LCC-008 regression remains green |
 | R20 | Production flags continue to default false until the real Pilot Recovery is explicitly run |
+
+## Attempt 2 outcome, diagnostics, timeout, and remediation acceptance
+
+Attempt 2 proved that a successful Codex process is not itself a successful Pilot
+outcome. The Worker must retain the Codex outcome and independently require a
+clean candidate commit descended from, and different to, the unchanged base.
+Private GitHub access is an explicit prompt contract; the bounded WorkItem title
+and Acceptance Criteria are also transported so a generic state-machine action
+such as `Retry failed work` is never the only task context.
+
+The Worker owns execution for 30 minutes. The Controller polls for at most 31
+minutes, leaving a bounded terminal-observation margin. At its deadline it makes
+a final status observation, requests execution-scoped cancellation only if the
+record is still active, and makes one final bounded observation. It must not
+return a locally invented timeout immediately before an already-terminal Worker
+record.
+
+The consumed pre-Codex Recovery grant is not reset or broadened. A third attempt
+requires a distinct Human remediation request whose value binds the immutable
+cycleId to the exact latest failed executionId. At most one remediation grant is
+durably consumed per cycle. It adds one dispatch to the existing count and does
+not delete or rewrite either prior attempt.
+
+| Attempt 2 AC | Automated contract |
+|---|---|
+| A201 | Codex process success with candidate HEAD equal to base is Pilot FAILED |
+| A202 | Postcondition failure preserves bounded/redacted Codex status, final message, and evidence |
+| A203 | Diagnostics preserve branch, base HEAD, observed candidate HEAD, status summary, and exact failed postcondition |
+| A204 | Dirty uncommitted changes cannot satisfy Pilot success |
+| A205 | A clean committed candidate descendant with unchanged base succeeds |
+| A206 | Pilot prompt requires implementation, verification, and commit and prohibits push/PR/merge/base modification |
+| A207 | Pilot request carries bounded title and Acceptance Criteria instead of only a generic transition action |
+| A208 | Private Issue access failure must be reported as a blocker and cannot produce Pilot success |
+| A209 | JSONL parsing uses the final completed agent message and retains it separately from raw events |
+| A210 | No Worker cleanup resets a failed candidate workspace or erases its diagnostics |
+| A211 | Controller observes a terminal Worker result at the timeout boundary instead of false timing out |
+| A212 | Controller timeout is longer than the bounded Worker timeout and remains bounded |
+| A213 | Controller timeout performs execution-scoped cancel and a final bounded status observation |
+| A214 | A terminal/cancel race returns the terminal Worker result without overwriting it |
+| A215 | Attempt 1, attempt 2, Recovery consumption, and all verification history remain unchanged |
+| A216 | Post-Recovery remediation requires exact cycleId plus latest failed executionId |
+| A217 | Remediation is Human-only, one-shot, restart-idempotent, and grants exactly one additional dispatch |
+| A218 | Automatic retry, Recovery reuse, counter reset, state deletion, and unrelated dispatch remain prohibited |
+| A219 | Diagnostics and observability expose no credential, full environment, secret, or unnecessary absolute path |
+| A220 | LCC-001 through LCC-008, Windows, PowerShell, Linux, and synthetic Pilot regressions remain green |

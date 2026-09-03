@@ -7,12 +7,12 @@ export type GateStatus = "ELIGIBLE" | "WAITING_WORKER" | "REJECTED" | "ALREADY_R
 export interface RepositoryExecutionTarget { repository: string; workerId: string; workspaceId: string; requiredCapabilities: string[]; concurrency: "EXCLUSIVE_REPOSITORY" }
 export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; verificationProfiles?:Record<string,string[]>; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
 export interface ExecutionLease { executionId: string; workItemId: string; repository: string; workerId: string; acquiredAt: string; status: "ACTIVE" | "COMPLETED" | "ABANDONED"; attempt: number }
-export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[]; retryable?:boolean;baseHead?:string;candidateBranch?:string;candidateHead?:string }
+export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[]; retryable?:boolean;finalAgentMessage?:string;baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export interface ExecutionState { leases: ExecutionLease[]; records: ExecutionRecord[] }
 export interface GateDecision { status: GateStatus; reason: string; target: RepositoryExecutionTarget | null; worker: WorkerDescriptor | null }
-export interface ExecutionRequest { executionId: string; workItemId: string; repository: string; workspaceId: string; actionKind: "EXECUTE"; summary: string; requiredCapabilities: string[]; sourceUrl: string;pilot?:{cycleId:string;externalId:string;baseBranch:string;candidateBranch:string} }
+export interface ExecutionRequest { executionId: string; workItemId: string; repository: string; workspaceId: string; actionKind: "EXECUTE"; summary: string; acceptanceCriteria?:string[]; requiredCapabilities: string[]; sourceUrl: string;pilot?:{cycleId:string;externalId:string;baseBranch:string;candidateBranch:string} }
 export type ExecutionResultStatus = "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT" | "WORKER_LOST";
-export interface ExecutionResult { executionId: string; status: ExecutionResultStatus; startedAt: string; finishedAt: string; exitCode?: number; summary: string; evidence: string[]; retryable: boolean;baseHead?:string;candidateBranch?:string;candidateHead?:string }
+export interface ExecutionResult { executionId: string; status: ExecutionResultStatus; startedAt: string; finishedAt: string; exitCode?: number; summary: string; evidence: string[]; retryable: boolean;finalAgentMessage?:string;baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export interface WorkerRegistry { get(workerId: string): Promise<WorkerDescriptor | null> }
 export interface Executor { execute(request: ExecutionRequest): Promise<ExecutionResult> }
 export interface AcquireExecutionCommand { executionId: string; workItemId: string; target: RepositoryExecutionTarget; worker: WorkerDescriptor; requestedAt: string; shuttingDown: boolean }
@@ -51,7 +51,7 @@ export class ExecutionService {
     const preliminary = evaluateExecutionGate(workItem, target, worker, await this.repository.executionState(), this.shuttingDown); if (preliminary.status !== "ELIGIBLE" || !target || !worker) return preliminary;
     const requestedAt = new Date(this.now()).toISOString(); const acquired = await this.repository.acquireExecution({ executionId: this.id(), workItemId, target, worker, requestedAt, shuttingDown: this.shuttingDown });
     if (acquired.decision.status !== "ELIGIBLE" || !acquired.lease || !acquired.workItem) return acquired.decision;
-    const request: ExecutionRequest = { executionId: acquired.lease.executionId, workItemId, repository: target.repository, workspaceId: target.workspaceId, actionKind: "EXECUTE", summary: workItem.nextAction.summary, requiredCapabilities: [...new Set([...workItem.nextAction.requiredCapabilities, ...target.requiredCapabilities])], sourceUrl: workItem.sourceUrl,...(this.pilotScope?{pilot:{cycleId:this.pilotScope.cycleId,externalId:workItem.source.externalId,baseBranch:this.pilotScope.baseBranch,candidateBranch:deterministicCandidateBranch(workItem.source.externalId,acquired.lease.executionId)}}:{}) };
+    const request: ExecutionRequest = { executionId: acquired.lease.executionId, workItemId, repository: target.repository, workspaceId: target.workspaceId, actionKind: "EXECUTE", summary: workItem.title.slice(0,500), acceptanceCriteria:workItem.acceptanceCriteria.slice(0,100).map(value=>value.slice(0,500)),requiredCapabilities: [...new Set([...workItem.nextAction.requiredCapabilities, ...target.requiredCapabilities])], sourceUrl: workItem.sourceUrl,...(this.pilotScope?{pilot:{cycleId:this.pilotScope.cycleId,externalId:workItem.source.externalId,baseBranch:this.pilotScope.baseBranch,candidateBranch:deterministicCandidateBranch(workItem.source.externalId,acquired.lease.executionId)}}:{}) };
     const operation = this.run(request); this.inflight.add(operation); try { await operation; } finally { this.inflight.delete(operation); }
     return acquired.decision;
   }
@@ -60,7 +60,7 @@ export class ExecutionService {
     let result: ExecutionResult;
     try { result = await this.executor.execute(structuredClone(request)); }
     catch (error) { const now = new Date(this.now()).toISOString(); result = { executionId: request.executionId, status: "FAILED", startedAt: now, finishedAt: now, summary: error instanceof Error ? error.message.slice(0, 500) : "executor failure", evidence: [], retryable: true }; }
-    const sanitized = { ...result, summary: result.summary.slice(0, 500), evidence: result.evidence.slice(0, 10).map((item) => item.slice(0, 500)) };
+    const sanitized:ExecutionResult = { ...result, summary: safeExecutionText(result.summary), evidence: result.evidence.slice(0, 10).map(safeExecutionText),...(result.finalAgentMessage?{finalAgentMessage:safeExecutionText(result.finalAgentMessage)}:{}) };
     let event: WorkEvent;
     if (result.status === "SUCCEEDED") event = { type: "EXECUTION_COMPLETED", verification: "AUTOMATED" };
     else if (result.status === "WORKER_LOST") event = { type: "WORKER_UNAVAILABLE", monitor: "LCC" };
@@ -68,3 +68,4 @@ export class ExecutionService {
     await this.repository.completeExecution(request.executionId, sanitized, event);
   }
 }
+function safeExecutionText(value:string):string{return value.replace(/(token|secret|api[_-]?key)\s*[:=]\s*\S+/gi,"$1=[REDACTED]").replace(/Bearer\s+\S+/gi,"Bearer [REDACTED]").replace(/[A-Za-z]:\\(?:[^\s\\]+\\)+[^\s]*/g,"[LOCAL_PATH]").replace(/\/(?:home|Users|tmp|var)\/[^\s]*/g,"[LOCAL_PATH]").slice(-500);}
