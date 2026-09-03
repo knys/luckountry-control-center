@@ -1,17 +1,18 @@
 import type { WorkItem } from "../domain/work-item.js";
 import type { WorkEvent } from "../domain/work-state-machine.js";
 import { randomUUID } from "node:crypto";
+import { deterministicCandidateBranch,type PilotScope } from "../domain/pilot.js";
 
 export type GateStatus = "ELIGIBLE" | "WAITING_WORKER" | "REJECTED" | "ALREADY_RUNNING";
 export interface RepositoryExecutionTarget { repository: string; workerId: string; workspaceId: string; requiredCapabilities: string[]; concurrency: "EXCLUSIVE_REPOSITORY" }
 export interface WorkerDescriptor { workerId: string; status: "ONLINE" | "OFFLINE" | "BUSY" | "DRAINING" | "UNKNOWN"; capabilities: string[]; workspaceIds: string[]; executorKinds: string[]; verificationProfiles?:Record<string,string[]>; agentVersion?: string; codexVersion?: string; codexReady?: boolean; lastHealthAt?: string }
 export interface ExecutionLease { executionId: string; workItemId: string; repository: string; workerId: string; acquiredAt: string; status: "ACTIVE" | "COMPLETED" | "ABANDONED"; attempt: number }
-export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[] }
+export interface ExecutionRecord { executionId: string; workItemId: string; attempt: number; workerId: string; requestedAt: string; startedAt: string; finishedAt: string | null; resultStatus: ExecutionResultStatus | "ACTIVE"; summary: string; evidence: string[]; baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export interface ExecutionState { leases: ExecutionLease[]; records: ExecutionRecord[] }
 export interface GateDecision { status: GateStatus; reason: string; target: RepositoryExecutionTarget | null; worker: WorkerDescriptor | null }
-export interface ExecutionRequest { executionId: string; workItemId: string; repository: string; workspaceId: string; actionKind: "EXECUTE"; summary: string; requiredCapabilities: string[]; sourceUrl: string }
+export interface ExecutionRequest { executionId: string; workItemId: string; repository: string; workspaceId: string; actionKind: "EXECUTE"; summary: string; requiredCapabilities: string[]; sourceUrl: string;pilot?:{cycleId:string;externalId:string;baseBranch:string;candidateBranch:string} }
 export type ExecutionResultStatus = "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT" | "WORKER_LOST";
-export interface ExecutionResult { executionId: string; status: ExecutionResultStatus; startedAt: string; finishedAt: string; exitCode?: number; summary: string; evidence: string[]; retryable: boolean }
+export interface ExecutionResult { executionId: string; status: ExecutionResultStatus; startedAt: string; finishedAt: string; exitCode?: number; summary: string; evidence: string[]; retryable: boolean;baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export interface WorkerRegistry { get(workerId: string): Promise<WorkerDescriptor | null> }
 export interface Executor { execute(request: ExecutionRequest): Promise<ExecutionResult> }
 export interface AcquireExecutionCommand { executionId: string; workItemId: string; target: RepositoryExecutionTarget; worker: WorkerDescriptor; requestedAt: string; shuttingDown: boolean }
@@ -39,7 +40,7 @@ export function evaluateExecutionGate(workItem: WorkItem, target: RepositoryExec
 }
 export class ExecutionService {
   private shuttingDown = false; private readonly inflight = new Set<Promise<unknown>>();
-  constructor(private readonly repository: ExecutionRepository, private readonly targets: readonly RepositoryExecutionTarget[], private readonly workers: WorkerRegistry, private readonly executor: Executor, private readonly now: () => number = Date.now, private readonly id: () => string = randomUUID) {}
+  constructor(private readonly repository: ExecutionRepository, private readonly targets: readonly RepositoryExecutionTarget[], private readonly workers: WorkerRegistry, private readonly executor: Executor, private readonly now: () => number = Date.now, private readonly id: () => string = randomUUID,private readonly pilotScope?:PilotScope) {}
   async execute(workItemId: string): Promise<GateDecision> {
     if (this.shuttingDown) return { status: "REJECTED", reason: "execution service is shutting down", target: null, worker: null };
     const workItem = await this.repository.findWorkItem(workItemId); if (!workItem) return { status: "REJECTED", reason: "WorkItem not found", target: null, worker: null };
@@ -48,7 +49,7 @@ export class ExecutionService {
     const preliminary = evaluateExecutionGate(workItem, target, worker, await this.repository.executionState(), this.shuttingDown); if (preliminary.status !== "ELIGIBLE" || !target || !worker) return preliminary;
     const requestedAt = new Date(this.now()).toISOString(); const acquired = await this.repository.acquireExecution({ executionId: this.id(), workItemId, target, worker, requestedAt, shuttingDown: this.shuttingDown });
     if (acquired.decision.status !== "ELIGIBLE" || !acquired.lease || !acquired.workItem) return acquired.decision;
-    const request: ExecutionRequest = { executionId: acquired.lease.executionId, workItemId, repository: target.repository, workspaceId: target.workspaceId, actionKind: "EXECUTE", summary: workItem.nextAction.summary, requiredCapabilities: [...new Set([...workItem.nextAction.requiredCapabilities, ...target.requiredCapabilities])], sourceUrl: workItem.sourceUrl };
+    const request: ExecutionRequest = { executionId: acquired.lease.executionId, workItemId, repository: target.repository, workspaceId: target.workspaceId, actionKind: "EXECUTE", summary: workItem.nextAction.summary, requiredCapabilities: [...new Set([...workItem.nextAction.requiredCapabilities, ...target.requiredCapabilities])], sourceUrl: workItem.sourceUrl,...(this.pilotScope?{pilot:{cycleId:this.pilotScope.cycleId,externalId:workItem.source.externalId,baseBranch:this.pilotScope.baseBranch,candidateBranch:deterministicCandidateBranch(workItem.source.externalId,acquired.lease.executionId)}}:{}) };
     const operation = this.run(request); this.inflight.add(operation); try { await operation; } finally { this.inflight.delete(operation); }
     return acquired.decision;
   }

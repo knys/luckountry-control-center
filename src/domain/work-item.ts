@@ -19,6 +19,7 @@ export interface WorkItem {
   nextAction: NextAction;
   blocker: string | null;
   acceptanceCriteria: string[];
+  definitionReady?: boolean;
   evidence: string[];
   sourceUpdatedAt: string;
   lastSyncedAt: string;

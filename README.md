@@ -36,6 +36,8 @@ LCC-006 adds an HMAC-authenticated Windows execution worker on loopback port 920
 
 LCC-007 ingests normalized Acceptance Criteria from GitHub Issue bodies and turns allowlisted AUTO check IDs into fixed worker-local verification commands, durable criterion evidence, and deterministic state transitions. Production verification is independently fail-closed with `WORK_VERIFICATION_ENABLED=false`. Configure `WORK_VERIFICATION_TARGETS_JSON` on LCC and `WORKER_VERIFICATION_PROFILES_CONFIG` plus `WORKER_VERIFICATION_STATE_PATH` on the worker; executable paths in profiles are canonicalized and validated at startup. Run `npm run canary:verification` under the Windows worker account for the isolated AC-31/32 bridge described in `docs/lcc-007-tdd.md`.
 
+LCC-008 adds a controlled one-Issue pilot. Dispatch requires `WORK_AUTOMATION_MODE=pilot`, both existing enable flags, one exact unexpired `WORK_PILOT_SCOPE_JSON`, a ready worker/profile, deterministic Issue definition markers, and both pilot labels. Candidate work is committed only on a worker-allowlisted `lcc/pilot/*` branch with push disabled; matching independent evidence ends in `WAITING_HUMAN`, never automatic promotion. Defaults remain disabled. See `config/pilot-scope.example.json`, `docs/lcc-008-tdd.md`, and run `npm run canary:pilot` before real acceptance.
+
 ## Remote device agents
 
 The Control Center polls small read-only JSON agents over the LAN; it never runs SSH or remote commands. Configure endpoints without embedding host details in source:

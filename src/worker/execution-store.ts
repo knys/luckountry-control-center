@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ExecutionRequest, ExecutionResultStatus } from "../application/execution.js";
 
 export type WorkerExecutionStatus = "QUEUED" | "RUNNING" | ExecutionResultStatus | "LOST";
-export interface WorkerExecutionRecord { executionId: string; workspaceId: string; requestDigest: string; status: WorkerExecutionStatus; startedAt: string | null; finishedAt: string | null; summary: string; evidence: string[] }
+export interface WorkerExecutionRecord { executionId: string; workspaceId: string; requestDigest: string; status: WorkerExecutionStatus; startedAt: string | null; finishedAt: string | null; summary: string; evidence: string[];baseHead?:string;candidateBranch?:string;candidateHead?:string }
 interface WorkerSnapshot { version: 1; executions: WorkerExecutionRecord[] }
 export function executionRequestDigest(request: ExecutionRequest): string { return createHash("sha256").update(JSON.stringify(request)).digest("hex"); }
 export class WorkerExecutionStore {

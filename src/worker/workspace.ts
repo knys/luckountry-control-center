@@ -2,7 +2,7 @@ import { lstat, realpath, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 
-export interface WorkspaceConfig { workspaceId: string; repository: string; path: string; capabilities: string[] }
+export interface WorkspaceConfig { workspaceId: string; repository: string; path: string; capabilities: string[];pilotBaseBranch?:string;promotionDisabled?:boolean }
 export interface WorkspaceManifest { version: 1; workspaces: WorkspaceConfig[] }
 export interface CommandResult { code: number; stdout: string; stderr: string }
 export type CommandRunner = (executable: string, args: string[], cwd: string, stdin?: string, environment?: NodeJS.ProcessEnv, signal?: AbortSignal) => Promise<CommandResult>;
@@ -17,6 +17,8 @@ export function parseWorkspaceManifest(value: unknown): WorkspaceManifest {
   for (const item of root.workspaces) {
     if (!item || !item.workspaceId || !item.repository || !item.path || !Array.isArray(item.capabilities) || ids.has(item.workspaceId) || repositories.has(item.repository)) throw new Error("workspace allowlist must be one-to-one");
     if (!/^[A-Za-z0-9._-]+$/.test(item.workspaceId)) throw new Error("invalid workspaceId"); ids.add(item.workspaceId); repositories.add(item.repository);
+    if(item.pilotBaseBranch!==undefined&&!/^[A-Za-z0-9._-]+$/.test(item.pilotBaseBranch))throw new Error("invalid pilot base branch");
+    if(item.promotionDisabled!==undefined&&typeof item.promotionDisabled!=="boolean")throw new Error("invalid promotion policy");
   }
   return structuredClone(root as WorkspaceManifest);
 }

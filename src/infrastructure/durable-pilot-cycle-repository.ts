@@ -1,0 +1,12 @@
+import{mkdir,readFile,rename,writeFile}from"node:fs/promises";
+import{dirname}from"node:path";
+import{randomUUID}from"node:crypto";
+import type{PilotCycle}from"../domain/pilot.js";
+import type{PilotCycleRepository}from"../application/pilot-control.js";
+
+interface Snapshot{version:1;cycles:PilotCycle[]}
+export class DurablePilotCycleRepository implements PilotCycleRepository{private pending=Promise.resolve();private constructor(private path:string,private snapshot:Snapshot){}static async open(path:string){let snapshot:Snapshot;try{snapshot=JSON.parse(await readFile(path,"utf8")) as Snapshot;}catch(error){if(!(error instanceof Error&&"code"in error&&error.code==="ENOENT"))throw error;snapshot={version:1,cycles:[]};await persist(path,snapshot);}validate(snapshot);return new DurablePilotCycleRepository(path,snapshot);}async pilotCycles(){await this.pending;return structuredClone(this.snapshot.cycles);}async savePilotCycle(cycle:PilotCycle){const operation=this.pending.then(async()=>{validateCycle(cycle);const next=structuredClone(this.snapshot),index=next.cycles.findIndex(item=>item.cycleId===cycle.cycleId);if(index>=0){const old=next.cycles[index]!;if(old.scopeFingerprint!==cycle.scopeFingerprint||old.workItemId!==cycle.workItemId)throw new Error("pilot cycle retarget rejected");next.cycles[index]=structuredClone(cycle);}else next.cycles.push(structuredClone(cycle));await persist(this.path,next);this.snapshot=next;});this.pending=operation.then(()=>undefined,()=>undefined);return operation;}}
+async function persist(path:string,value:Snapshot){await mkdir(dirname(path),{recursive:true,mode:0o750});const temporary=`${path}.${randomUUID()}.tmp`;await writeFile(temporary,`${JSON.stringify(value,null,2)}\n`,{encoding:"utf8",mode:0o600});await rename(temporary,path);}
+function validate(value:Snapshot){if(value.version!==1||!Array.isArray(value.cycles))throw new Error("invalid pilot cycle store");value.cycles.forEach(validateCycle);}
+function validateCycle(value:PilotCycle){if(!value.cycleId||!value.scopeFingerprint||!value.workItemId||!["ARMED","EXECUTING","VERIFYING","VERIFIED","WAITING_HUMAN","FAILED","EXPIRED","CANCELLED"].includes(value.status)||value.executionAttempts<0||value.verificationRuns<0||value.baseHead&&value.baseHead.length>64||value.candidateHead&&value.candidateHead.length>64||value.candidateBranch&&value.candidateBranch.length>200||value.reason.length>500)throw new Error("invalid pilot cycle");}
+
