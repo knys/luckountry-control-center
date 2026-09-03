@@ -80,9 +80,8 @@ icacls.exe $runtimeDirectory /inheritance:r /grant:r "${account}:(OI)(CI)F" "SYS
 $taskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File `"$bootstrapPath`""
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 0) -StartWhenAvailable
-$principal = New-ScheduledTaskPrincipal -UserId $account -LogonType Password -RunLevel Limited
 $password = $ServiceCredential.GetNetworkCredential().Password
-Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $trigger -Settings $settings -Principal $principal -Password $password -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $trigger -Settings $settings -User $account -Password $password -RunLevel Limited -Force | Out-Null
 $password = $null
 
 Remove-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue
