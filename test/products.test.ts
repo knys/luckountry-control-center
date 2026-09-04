@@ -11,8 +11,23 @@ const metadata: GitHubMetadata = { repository: "knys/repo", repositoryUrl: "http
 
 test("parses the checked-in products manifest", async () => {
   const parsed = parseProductsManifest(JSON.parse(await readFile("config/products.json", "utf8")));
-  assert.equal(parsed.products.length, 10);
-  assert.equal(parsed.products.filter((product) => product.repository === "knys/TOBIE").length, 4);
+  assert.equal(parsed.products.length, 11);
+  assert.equal(parsed.products.filter((product) => product.repository === "knys/TOBIE").length, 5);
+});
+
+test("routes active work only to the matching product in a shared repository",async()=>{
+  const shared=parseProductsManifest({version:1,products:[
+    {...item,id:"draw",name:"DRAW",workItemMatch:["DRAW"]},
+    {...item,id:"keiba",name:"KEIBA",workItemMatch:["KEIBA"]},
+  ]});
+  const work={id:"github:knys/repo:174",source:{repository:"knys/repo",externalId:"174"},title:"KEIBA Operations",sourceUrl:"https://github.com/knys/repo/issues/174",workState:"RUNNING",ballHolder:"CODEX",nextAction:{summary:"Continue execution"},blocker:null,evidence:[]};
+  const execution={executionId:"run-174",workItemId:work.id,resultStatus:"ACTIVE",startedAt:"2026-09-04T00:00:00Z",finishedAt:null,summary:"Running"};
+  const service=new ProductService(shared,{fetch:async()=>new Map([[metadata.repository,metadata]])},60_000,()=>100_000,async()=>({workItems:[work],executions:[execution]}));
+  const result=await service.getProducts();
+  assert.equal(result.products.find(value=>value.id==="keiba")?.status,"RUNNING");
+  assert.equal(result.products.find(value=>value.id==="keiba")?.activeActor,"CODEX");
+  assert.equal(result.products.find(value=>value.id==="draw")?.status,"UNKNOWN");
+  assert.equal(result.products.find(value=>value.id==="draw")?.activeActor,null);
 });
 
 test("validates product status and ball", () => {
