@@ -26,8 +26,40 @@ test("routes active work only to the matching product in a shared repository",as
   const result=await service.getProducts();
   assert.equal(result.products.find(value=>value.id==="keiba")?.status,"RUNNING");
   assert.equal(result.products.find(value=>value.id==="keiba")?.activeActor,"CODEX");
+  assert.equal(result.products.find(value=>value.id==="keiba")?.issueNumber,174);
+  assert.equal(result.products.find(value=>value.id==="keiba")?.issueUrl,work.sourceUrl);
+  assert.match(result.products.find(value=>value.id==="keiba")?.nextActionJa??"",/Issue #174/);
   assert.equal(result.products.find(value=>value.id==="draw")?.status,"UNKNOWN");
   assert.equal(result.products.find(value=>value.id==="draw")?.activeActor,null);
+});
+
+test("projects DEFINED work as an actionable LCC queue instead of a Human gate",async()=>{
+  const work={id:"github:knys/repo:7",source:{repository:"knys/repo",externalId:"7"},title:"地図表示を修正する",sourceUrl:"https://github.com/knys/repo/issues/7",workState:"DEFINED",ballHolder:"HUMAN",nextAction:{summary:"Complete the definition and Coding Ready Gate"},blocker:null,evidence:[]};
+  const service=new ProductService(manifest,{fetch:async()=>new Map()},60_000,()=>100_000,async()=>({workItems:[work],executions:[]}));
+  const product=(await service.getProducts()).products[0]!;
+  assert.equal(product.status,"QUEUED");
+  assert.equal(product.ball,"LCC");
+  assert.equal(product.queuedActor,"LCC");
+  assert.equal(product.humanActionJa,null);
+  assert.match(product.nextActionJa,/Issue #7.*Acceptance Criteria.*Coding Ready/);
+});
+
+test("preserves an explicit physical Human acceptance with a concrete action and reason",async()=>{
+  const human=parseProductsManifest({version:1,products:[{...item,primaryIssue:8,status:"ACCEPTANCE",ball:"HUMAN",humanActionJa:"iPhoneのStandalone版で保存後に再起動し、データが残ることを確認してPASS/FAILを判断する",humanGate:"iPhone実機操作と目視によるUX判定が必要"}]});
+  const work={id:"github:knys/repo:8",source:{repository:"knys/repo",externalId:"8"},title:"PWA実機Acceptance",sourceUrl:"https://github.com/knys/repo/issues/8",workState:"DEFINED",ballHolder:"HUMAN",nextAction:{summary:"generic"},blocker:null,evidence:[]};
+  const product=(await new ProductService(human,{fetch:async()=>new Map()},60_000,()=>100_000,async()=>({workItems:[work],executions:[]})).getProducts()).products[0]!;
+  assert.equal(product.ball,"HUMAN");
+  assert.equal(product.issueNumber,8);
+  assert.match(product.humanActionJa??"",/iPhone.*PASS\/FAIL/);
+  assert.match(product.humanGate??"",/実機/);
+});
+
+test("never reports RUNNING without a matching active execution",async()=>{
+  const running={...item,status:"RUNNING" as const,ball:"CODEX" as const};
+  const product=(await new ProductService(parseProductsManifest({version:1,products:[running]}),{fetch:async()=>new Map()}).getProducts()).products[0]!;
+  assert.equal(product.status,"READY");
+  assert.equal(product.activeActor,null);
+  assert.equal(product.currentRun,null);
 });
 
 test("validates product status and ball", () => {
