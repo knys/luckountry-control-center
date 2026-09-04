@@ -1,0 +1,15 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { CommissionInbox } from "../src/application/commission-inbox.js";
+
+async function fixture(){const directory=await mkdtemp(join(tmpdir(),"lcc-commission-"));return{directory,inbox:new CommissionInbox(join(directory,"commissions.json")),cleanup:()=>rm(directory,{recursive:true,force:true})}}
+const candidate={title:"Bounded work",product:"LCC",source:"GITHUB" as const,sourceRef:"https://github.com/knys/repo/issues/7",repository:"knys/repo",issueNumber:7,issueUrl:"https://github.com/knys/repo/issues/7",commissionState:"READY" as const,suggestedNextActionJa:"Issue #7 のAcceptanceを満たす実装を行う",whyNotCommissioned:"明示Commission待ち"};
+
+test("Commission Inbox is restart-safe, duplicate-safe, and Commission creates a durable Run identity",async context=>{const f=await fixture();context.after(f.cleanup);const first=await f.inbox.register(candidate),duplicate=await f.inbox.register(candidate);assert.equal(first.commissionState,"READY");assert.equal(duplicate.commissionState,"DUPLICATE");const commissioned=await f.inbox.commission(first.id);assert.equal(commissioned.commissionState,"COMMISSIONED");assert.match(commissioned.runId??"",/^run-/);const restored=await new CommissionInbox(f.inbox.path).list();assert.equal(restored.find(value=>value.id===first.id)?.runId,commissioned.runId);assert.ok((await readFile(f.inbox.path,"utf8")).includes("COMMISSIONED"))});
+
+test("Commission boundary rejects arbitrary repositories, states, issue-less execution, and credential-shaped payload fields",async context=>{const f=await fixture();context.after(f.cleanup);await assert.rejects(f.inbox.register({...candidate,repository:"other/repo"}),/allowlisted/);await assert.rejects(f.inbox.register({...candidate,commissionState:"RUNNING" as never}),/commissionState/);const issueLess=await f.inbox.register({...candidate,issueNumber:null,issueUrl:null,sourceRef:"conversation:bounded"});await assert.rejects(f.inbox.commission(issueLess.id),/bounded GitHub issue/);const stored=await f.inbox.register({...candidate,issueNumber:8,sourceRef:"manual",command:"sudo anything",cwd:"/",environment:{TOKEN:"secret"}} as never);assert.equal("command" in stored,false);assert.equal("cwd" in stored,false);assert.equal("environment" in stored,false)});
+
+test("Commission Inbox Dashboard renders structured candidates without an execution control surface",async()=>{const [markup,script]=await Promise.all([readFile("src/public/index.html","utf8"),readFile("src/public/app.ts","utf8")]);assert.match(markup,/COMMISSION INBOX/);for(const value of ["CANDIDATE \/ PRODUCT","SOURCE \/ ISSUE","SUGGESTED NEXT ACTION","WHY NOT COMMISSIONED \/ HUMAN ACTION"])assert.match(markup,new RegExp(value));assert.match(script,/inbox\.candidates\.map\(commissionRow\)/);assert.doesNotMatch(markup+script,/commission-command|commission-cwd|commission-environment|credential/i)});

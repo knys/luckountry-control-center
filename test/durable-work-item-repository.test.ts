@@ -136,7 +136,7 @@ test("T13 production_data_directory_contract", async () => {
   const installer = await readFile("ops/install.sh", "utf8");
   const service = await readFile("ops/luckountry-control-center.service", "utf8");
   assert.match(installer, /\/var\/lib\/luckountry-control-center/);
-  assert.match(installer, /luckountry.*luckountry.*0750|0750.*luckountry.*luckountry/);
+  assert.match(installer, /luckountry.*luckountry.*0770|0770.*luckountry.*luckountry/);
   assert.match(service, /WORK_ITEM_DATABASE_PATH=\/var\/lib\/luckountry-control-center\/work-items\.json/);
   assert.match(service, /ReadWritePaths=\/var\/lib\/luckountry-control-center/);
 });

@@ -36,7 +36,7 @@ body:before {
 main {
   height: 100vh;
   display: grid;
-  grid-template-rows: 68px 142px minmax(0, 1fr) 22px;
+  grid-template-rows: 68px 142px minmax(220px, 1fr) 150px 22px;
   gap: 8px;
   padding: 10px 16px;
 }
@@ -104,9 +104,20 @@ h1 span {
   font-size: 9px;
 }
 .devices-section,
-.products-section {
+.products-section,
+.commissions-section {
   min-height: 0;
 }
+.commission-table { height: calc(100% - 25px); border: 1px solid var(--line); background: rgba(9,21,25,.86); overflow-y: auto; }
+.commission-row { display: grid; grid-template-columns: 1.1fr 1fr .65fr 1.6fr 1.6fr; min-height: 34px; align-items: center; border-bottom: 1px solid #193038; }
+.commission-row > span,.commission-row > strong { min-width: 0; padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+.commission-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+.commission-row a { color: var(--cyan); text-decoration: none; }
+.commission-header { position: sticky; top: 0; z-index: 1; min-height: 22px; color: var(--muted); background: #0e2025; }
+.commission-header span { font-size: 9px; letter-spacing: .08em; }
+.commission-state { justify-self: start; border: 1px solid currentColor; color: var(--cyan); }
+.state-rejected,.state-duplicate { color: var(--muted); }
+.state-needs_definition { color: var(--amber); }
 .device-table,
 .product-table {
   height: calc(100% - 25px);
@@ -373,7 +384,8 @@ footer {
     min-width: 150px;
   }
   .devices-section,
-  .products-section {
+  .products-section,
+  .commissions-section {
     margin-top: 10px;
   }
   .device-table,
@@ -387,6 +399,7 @@ footer {
   .product-row {
     min-width: 1050px;
   }
+  .commission-row { min-width: 900px; }
   footer {
     margin-top: 10px;
   }
