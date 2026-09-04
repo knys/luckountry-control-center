@@ -9,6 +9,7 @@ import { composeExecutionRuntime, composeIssueRuntime,composePilotRuntime,compos
 import { discoverRepositories } from "./composition.js";
 import { composeProductionSelfCommissioning } from "./production-self-commissioning-composition.js";
 import { CommissionInbox,type WatcherStatus } from "./application/commission-inbox.js";
+import { DurableCommissionRunRegistrar } from "./application/commission-runs.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? "3000");
@@ -22,7 +23,7 @@ const durable=issueRuntime.repository as Required<typeof issueRuntime.repository
 const executionRuntime = pilotRuntime ? await composeExecutionRuntime(durable, repositories,process.env,pilotRuntime) : null;
 const verificationRuntime=pilotRuntime?await composeVerificationRuntime(durable,repositories,process.env,pilotRuntime):null;
 const selfCommissioning=issueRuntime.repository.acquireExecution&&issueRuntime.repository.acquireVerification?await composeProductionSelfCommissioning(durable):undefined;
-const commissionInbox=new CommissionInbox(process.env.COMMISSION_INBOX_PATH??"/var/lib/luckountry-control-center/commissions.json"),watcherPath=process.env.COMMISSION_WATCHER_STATUS_PATH??"/var/lib/luckountry-control-center/watcher.json";
+const commissionData=process.env.LCC_DATA_DIRECTORY??"/var/lib/luckountry-control-center",commissionInbox=new CommissionInbox(process.env.COMMISSION_INBOX_PATH??join(commissionData,"commissions.json"),new DurableCommissionRunRegistrar(process.env.COMMISSION_RUNS_PATH??join(commissionData,"commission-runs.json"))),watcherPath=process.env.COMMISSION_WATCHER_STATUS_PATH??join(commissionData,"watcher.json");
 const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined,issueRuntime.repository.verificationState?()=>issueRuntime.repository.verificationState!():undefined,pilotRuntime?async()=>{const scope=pilotRuntime.control.scope,items=scope?await issueRuntime.repository.list(scope.repository):[];return{control:pilotRuntime.control,cycles:await pilotRuntime.cycles.pilotCycles(),matchedWorkItemIds:scope?items.filter(item=>item.source.externalId===scope.externalId).map(item=>item.id):[],workerReady:pilotRuntime.targetReady,recovery:await pilotRuntime.readiness.recoveryStatus()};}:undefined,selfCommissioning,{inbox:commissionInbox,token:process.env.SELF_COMMISSIONING_CONTROL_TOKEN??"",status:async()=>{try{return JSON.parse(await readFile(watcherPath,"utf8")) as WatcherStatus}catch{return null}}}));
 
 server.listen(port, host, () => console.log(`Luckountry Control Center listening on http://${host}:${port}`));

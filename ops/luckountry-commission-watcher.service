@@ -8,7 +8,7 @@ SupplementaryGroups=luckountry
 WorkingDirectory=/home/user/.lcc-commission-watcher/workspace
 Environment=COMMISSION_INBOX_PATH=/var/lib/luckountry-control-center/commissions.json
 Environment=COMMISSION_WATCHER_STATUS_PATH=/var/lib/luckountry-control-center/watcher.json
-Environment=LCC_WORKSPACE=/home/user/.lcc-commission-watcher/workspace
+Environment=LCC_WORKSPACE_ROOT=/home/user/.lcc-commission-watcher/workspaces
 ExecStart=/usr/bin/node /opt/luckountry-control-center/dist/application/commission-watcher.js
 Restart=always
 RestartSec=15
