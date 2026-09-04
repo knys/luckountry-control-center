@@ -8,7 +8,7 @@ export const productBalls = ["CHATGPT", "CODEX", "LCC", "HUMAN", "EXTERNAL", "NO
 export type ProductState = typeof productStatuses[number];
 export type ProductBall = typeof productBalls[number];
 
-export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string }
+export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string; workItemMatch?:string[] }
 export interface ProductsManifest { version: 1; products: ProductManifestItem[] }
 export interface GitHubMetadata { repository: string; repositoryUrl: string; defaultBranch: string | null; headSha: string | null; openIssues: number; openPullRequests: number; updatedAt: string }
 export interface ProductStatus extends ProductManifestItem { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; activeActor:string|null;currentRun:string|null;blocker:string|null;humanGate:string|null;latestGitHubEvidence:string|null }
@@ -31,7 +31,9 @@ export function parseProductsManifest(value: unknown): ProductsManifest {
     if (!productStatuses.includes(item.status as ProductState)) throw new Error(`invalid product status at index ${index}`);
     if (!productBalls.includes(item.ball as ProductBall)) throw new Error(`invalid product ball at index ${index}`);
     if (item.repository !== null && (!nonEmpty(item.repository) || !repositoryPattern.test(item.repository))) throw new Error(`invalid repository at index ${index}`);
-    return { id: item.id, name: item.name, repository: item.repository as string | null, summary: item.summary, status: item.status as ProductState, ball: item.ball as ProductBall, nextAction: item.nextAction };
+    const workItemMatch=item.workItemMatch;
+    if(workItemMatch!==undefined&&(!Array.isArray(workItemMatch)||workItemMatch.length===0||workItemMatch.some(value=>!nonEmpty(value)||value.length>100)))throw new Error(`invalid work item match at index ${index}`);
+    return { id: item.id, name: item.name, repository: item.repository as string | null, summary: item.summary, status: item.status as ProductState, ball: item.ball as ProductBall, nextAction: item.nextAction,...(workItemMatch?{workItemMatch:[...workItemMatch]}:{}) };
   });
   return { version: 1, products };
 }
@@ -101,8 +103,9 @@ export class ProductService {
     const portfolio=await this.portfolio?.().catch(()=>undefined);
     return { timestamp: new Date(this.now()).toISOString(), cacheUpdatedAt: this.cacheUpdatedAt, stale, warning: this.warning, products: this.manifest.products.map((product) => {
       const github = product.repository ? this.metadata.get(product.repository) : undefined;
-      const candidates=portfolio?.workItems.filter(value=>value.source.repository===product.repository)??[],rank=(value:PortfolioWork)=>["RUNNING","VERIFYING","RETRYING","READY","WAITING_WORKER","WAITING_HUMAN","BLOCKED","FAILED","DEFINED","DONE"].indexOf(value.workState),work=[...candidates].sort((a,b)=>rank(a)-rank(b))[0],execution=work?[...(portfolio?.executions??[])].reverse().find(value=>value.workItemId===work.id&&["ACTIVE"].includes(value.resultStatus)):undefined,derivedStatus:ProductState|undefined=execution?"RUNNING":work?.workState==="READY"||work?.workState==="RETRYING"?"QUEUED":work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":undefined;
+      const candidates=portfolio?.workItems.filter(value=>value.source.repository===product.repository&&matchesProductWorkItem(product,value))??[],rank=(value:PortfolioWork)=>["RUNNING","VERIFYING","RETRYING","READY","WAITING_WORKER","WAITING_HUMAN","BLOCKED","FAILED","DEFINED","DONE"].indexOf(value.workState),work=[...candidates].sort((a,b)=>rank(a)-rank(b))[0],execution=work?[...(portfolio?.executions??[])].reverse().find(value=>value.workItemId===work.id&&["ACTIVE"].includes(value.resultStatus)):undefined,derivedStatus:ProductState|undefined=execution?"RUNNING":work?.workState==="READY"||work?.workState==="RETRYING"?"QUEUED":work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":undefined;
       return { ...product,...(derivedStatus?{status:derivedStatus}:{}),...(work?{ball:(execution?"CODEX":work.ballHolder) as ProductBall,nextAction:work.nextAction.summary}:{}), repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:execution?"CODEX":null,currentRun:execution?.executionId??null,blocker:work?.blocker??(work?.workState==="FAILED"?work.nextAction.summary:null),humanGate:work?.workState==="WAITING_HUMAN"?work.nextAction.summary:null,latestGitHubEvidence:work?.sourceUrl??github?.repositoryUrl??null };
     }) };
   }
 }
+function matchesProductWorkItem(product:ProductManifestItem,work:PortfolioWork):boolean{if(!product.workItemMatch)return true;const haystack=`${work.title} ${work.id}`.toLocaleLowerCase();return product.workItemMatch.some(value=>haystack.includes(value.toLocaleLowerCase()));}
