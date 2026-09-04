@@ -16,6 +16,7 @@ Environment=WORK_EXECUTION_ENABLED=false
 Environment=WORK_VERIFICATION_ENABLED=false
 Environment=WORK_AUTOMATION_MODE=disabled
 EnvironmentFile=-/etc/luckountry-control-center/environment
+EnvironmentFile=-/etc/luckountry-control-center/self-commissioning
 ExecStart=/usr/bin/node /opt/luckountry-control-center/dist/server.js
 Restart=on-failure
 RestartSec=5s
