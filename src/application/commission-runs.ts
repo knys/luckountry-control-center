@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access,mkdir } from "node:fs/promises";
+import { access,mkdir,readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommissionCandidate,CommissionRunRegistrar } from "./commission-inbox.js";
 import { DurableSelfCommissioningStore,SelfCommissioningOrchestrator,type CodexJob,type CommissioningExecutors,type CommissioningResult } from "./self-commissioning.js";
@@ -21,13 +21,13 @@ export type FixedRunner=(file:string,args:string[],cwd:string,inherit?:boolean)=
 const defaultRunner:FixedRunner=(file,args,cwd,inherit=false)=>new Promise(resolve=>{const child=spawn(file,args,{cwd,stdio:inherit?"inherit":["ignore","pipe","pipe"],shell:false});let stdout="",stderr="";if(!inherit){child.stdout!.on("data",v=>stdout+=String(v));child.stderr!.on("data",v=>stderr+=String(v))}child.once("exit",code=>resolve({code:code??1,stdout,stderr}));child.once("error",error=>resolve({code:1,stdout,stderr:error.message}))});
 
 const profiles={
-  "knys/luckountry-control-center":{checks:[["/usr/bin/npm",["test"]],["/usr/bin/npm",["run","typecheck"]],["/usr/bin/npm",["run","build"]],["/usr/bin/git",["diff","--check"]]] as [string,string[]][],paths:/^(src|test|ops|config|docs)\/|^(README\.md|package(-lock)?\.json|tsconfig[^/]*\.json)$/,deploy:["/usr/bin/sudo",["-n","/usr/local/sbin/lcc-deploy"]] as [string,string[]]},
+  "knys/luckountry-control-center":{checks:[["/usr/bin/npm",["test"]],["/usr/bin/npm",["run","typecheck"]],["/usr/bin/npm",["run","build"]],["/usr/bin/git",["diff","--check"]]] as [string,string[]][],paths:/^(src|test|ops|config|docs)\/|^(README\.md|package(-lock)?\.json|tsconfig[^/]*\.json)$/,deploy:true},
   "knys/TOBIE":{checks:[["/usr/bin/npm",["test"]],["/usr/bin/npm",["run","typecheck"]],["/usr/bin/npm",["run","build"]],["/usr/bin/git",["diff","--check"]]] as [string,string[]][],paths:/^(src|scripts|docs|public)\/|^(README\.md|package(-lock)?\.json|tsconfig[^/]*\.json|vite\.config\.ts)$/,deploy:null}
 } as const;
 
 export class BoundedLocalCodexExecutor {
   private child:ReturnType<typeof spawn>|null=null;
-  constructor(private workspaceRoot:string,private codexPath="/usr/local/bin/codex",private run:FixedRunner=defaultRunner){}
+  constructor(private workspaceRoot:string,private codexPath="/usr/local/bin/codex",private run:FixedRunner=defaultRunner,private deploy:()=>Promise<boolean>=requestInternalDeploy){}
   async execute(job:CodexJob):Promise<CommissioningResult>{
     const profile=profiles[job.repository as keyof typeof profiles];if(!profile)return{status:"BLOCKED",summary:"repository has no promotion profile",evidence:[]};
     const cwd=join(this.workspaceRoot,workspaceId(job.repository));await mkdir(this.workspaceRoot,{recursive:true});
@@ -39,7 +39,7 @@ export class BoundedLocalCodexExecutor {
     const codex=await this.codex(prompt,cwd);if(codex.code)return{status:"FAILED",summary:`Codex exited ${codex.code}`,evidence:[],retryable:true};
     const finalized=await finalizeCandidate(job,cwd,base.stdout.trim(),profile.paths,this.run);if(finalized)return finalized;
     const post=await verifyCandidate(job,cwd,base.stdout.trim(),profile.paths,profile.checks,this.run);if(post.status!=="SUCCEEDED")return post;
-    const promoted=await promote(job,cwd,branch,profile.deploy,this.run);if(promoted.status!=="SUCCEEDED")return promoted;
+    const promoted=await promote(job,cwd,branch,profile.deploy?this.deploy:null,this.run);if(promoted.status!=="SUCCEEDED")return promoted;
     if(job.humanGate)return{status:"WAITING_HUMAN",summary:"Automated implementation, promotion and deploy completed",evidence:[...post.evidence,...promoted.evidence],humanGate:job.humanGate};
     return{status:"SUCCEEDED",summary:"Committed candidate passed independent checks and promotion",evidence:[...post.evidence,...promoted.evidence]};
   }
@@ -65,14 +65,15 @@ export async function verifyCandidate(job:CodexJob,cwd:string,base:string,pathBo
   return{status:"SUCCEEDED",summary:"Candidate postconditions passed",evidence};
 }
 
-async function promote(job:CodexJob,cwd:string,branch:string,deploy:[string,string[]]|null,run:FixedRunner):Promise<CommissioningResult>{
+async function promote(job:CodexJob,cwd:string,branch:string,deploy:(()=>Promise<boolean>)|null,run:FixedRunner):Promise<CommissioningResult>{
   if(!job.policy.allowPush||!job.policy.allowMerge)return{status:"BLOCKED",summary:"promotion authority unavailable",evidence:[]};
   for(const [file,args] of [["/usr/bin/git",["push","-u","origin",branch]],["/usr/bin/gh",["pr","create","--repo",job.repository,"--base","main","--head",branch,"--title",`Commission #${job.issueNumber}: autonomous implementation`,"--body",`Closes #${job.issueNumber}\\n\\nAutomated candidate; independent fixed checks and postconditions passed.`]]] as [string,string[]][]){const value=await run(file,args,cwd);if(value.code)return{status:"FAILED",summary:`Promotion command failed: ${file.split("/").at(-1)}`,evidence:[],retryable:true}}
   const checks=await run("/usr/bin/gh",["pr","checks",branch,"--repo",job.repository,"--watch","--interval","10"],cwd);if(checks.code&&!/no checks reported/i.test(checks.stderr+checks.stdout))return{status:"FAILED",summary:"Required CI did not pass",evidence:[],retryable:true};
   const merge=await run("/usr/bin/gh",["pr","merge",branch,"--repo",job.repository,"--merge","--delete-branch"],cwd);if(merge.code)return{status:"FAILED",summary:"main merge failed",evidence:[],retryable:true};
   const evidence=["push=PASS","pr=PASS","ci=PASS","main-merge=PASS"];
-  if(deploy){if(!job.policy.allowDeploy)return{status:"BLOCKED",summary:"deploy authority unavailable",evidence};const mirror="/home/user/projects/luckountry-control-center",mirrorStatus=await run("/usr/bin/git",["status","--porcelain"],mirror);if(mirrorStatus.code||mirrorStatus.stdout.trim())return{status:"BLOCKED",summary:"fixed production source mirror is not clean",evidence};for(const args of [["fetch","origin","main"],["merge","--ff-only","origin/main"]]){const sync=await run("/usr/bin/git",args,mirror);if(sync.code)return{status:"FAILED",summary:"fixed production source mirror sync failed",evidence,retryable:true}}const result=await run(deploy[0],deploy[1],mirror);if(result.code)return{status:"FAILED",summary:"allowlisted production deploy failed",evidence,retryable:true};const health=await fetch("http://127.0.0.1:3000/health").then(r=>r.ok).catch(()=>false);if(!health)return{status:"FAILED",summary:"production health canary failed",evidence,retryable:true};evidence.push("previous-artifact=retained","allowlisted-deploy=PASS","health=PASS")}
+  if(deploy){if(!job.policy.allowDeploy)return{status:"BLOCKED",summary:"deploy authority unavailable",evidence};const mirror="/home/user/projects/luckountry-control-center",mirrorStatus=await run("/usr/bin/git",["status","--porcelain"],mirror);if(mirrorStatus.code||mirrorStatus.stdout.trim())return{status:"BLOCKED",summary:"fixed production source mirror is not clean",evidence};for(const args of [["fetch","origin","main"],["merge","--ff-only","origin/main"]]){const sync=await run("/usr/bin/git",args,mirror);if(sync.code)return{status:"FAILED",summary:"fixed production source mirror sync failed",evidence,retryable:true}}const build=await run("/usr/bin/npm",["run","build"],mirror);if(build.code)return{status:"FAILED",summary:"fixed production source build failed",evidence,retryable:true};if(!await deploy())return{status:"FAILED",summary:"allowlisted production deploy request failed",evidence,retryable:true};let health=false;for(let i=0;i<30&&!health;i++){await new Promise(resolve=>setTimeout(resolve,1000));health=await fetch("http://127.0.0.1:3000/health").then(r=>r.ok).catch(()=>false)}if(!health)return{status:"FAILED",summary:"production health canary failed",evidence,retryable:true};evidence.push("previous-artifact=retained","allowlisted-deploy=PASS","health=PASS")}
   return{status:"SUCCEEDED",summary:"Autonomous promotion completed",evidence};
 }
+async function requestInternalDeploy(){try{const token=(await readFile(process.env.COMMISSION_DEPLOY_TOKEN_PATH??"/var/lib/luckountry-control-center/commission-deploy-token","utf8")).trim(),response=await fetch("http://127.0.0.1:3000/api/internal/commission-deploy",{method:"POST",headers:{authorization:`Bearer ${token}`}});return response.status===202}catch{return false}}
 export function commissionExecutors(codex:BoundedLocalCodexExecutor):CommissioningExecutors{const unavailable=async():Promise<CommissioningResult>=>({status:"BLOCKED",summary:"Unsupported Commission operation",evidence:[]});return{tx:unavailable,gtx:unavailable,codex:job=>codex.execute(job)}}
 export const workspaceId=(repository:string)=>repository.replace(/[^A-Za-z0-9._-]/g,"-").slice(0,100);
