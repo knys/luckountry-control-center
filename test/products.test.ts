@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createRequestHandler } from "../src/http-app.js";
-import { parseGitHubMetadata, parseProductsManifest, ProductService, type GitHubMetadata, type GitHubMetadataProvider } from "../src/products.js";
+import { parseGitHubMetadata, parseProductsManifest, ProductService, type GitHubMetadata, type GitHubMetadataProvider, type PortfolioState } from "../src/products.js";
 
 const item = { id: "product-one", name: "Product One", repository: "knys/repo", summary: "Review required", status: "UNKNOWN", ball: "UNKNOWN", nextAction: "Review manifest" } as const;
 const manifest = parseProductsManifest({ version: 1, products: [item] });
@@ -53,6 +53,35 @@ test("preserves an explicit physical Human acceptance with a concrete action and
   assert.equal(product.issueNumber,8);
   assert.match(product.humanActionJa??"",/iPhone.*PASS\/FAIL/);
   assert.match(product.humanGate??"",/実機/);
+  assert.deepEqual(product.humanSource,{repository:"knys/repo",issueNumber:8,revision:work.id});
+});
+
+test("reconciles Human fields across close, replacement, reopen, and sync failure",async()=>{
+  const human=parseProductsManifest({version:1,products:[{...item,primaryIssue:8,status:"ACCEPTANCE",ball:"HUMAN",humanActionJa:"Issue #8を実機確認する",humanGate:"実機判断が必要"}]});
+  const primary={id:"github:knys/repo:8",source:{repository:"knys/repo",externalId:"8"},title:"Primary acceptance",sourceUrl:"https://github.com/knys/repo/issues/8",sourceState:"open",sourceUpdatedAt:"2026-09-05T00:00:00Z",workState:"DEFINED",ballHolder:"HUMAN",nextAction:{summary:"accept"},blocker:null,evidence:[]};
+  const replacement={...primary,id:"github:knys/repo:9",source:{repository:"knys/repo",externalId:"9"},title:"New acceptance",sourceUrl:"https://github.com/knys/repo/issues/9",sourceUpdatedAt:"2026-09-05T01:00:00Z",workState:"WAITING_HUMAN"};
+  const succeeded={status:"SUCCEEDED",lastAttemptedSyncAt:"2026-09-05T01:00:00Z",lastSuccessfulSyncAt:"2026-09-05T01:00:00Z",failureReason:null,failureType:null,resetAt:null,retryAfter:null} as const;
+  let state:PortfolioState={workItems:[primary],executions:[],syncMetadata:{"knys/repo":succeeded}};
+  const service=new ProductService(human,{fetch:async()=>new Map([[metadata.repository,metadata]])},0,()=>100_000,async()=>state);
+  let product=(await service.getProducts()).products[0]!;
+  assert.equal(product.humanActionJa,"Issue #8を実機確認する");
+  assert.equal(product.humanSource?.issueNumber,8);
+
+  state={...state,workItems:[]};
+  product=(await service.getProducts()).products[0]!;
+  assert.equal(product.humanActionJa,null);assert.equal(product.humanGate,null);assert.equal(product.humanSource,null);assert.notEqual(product.ball,"HUMAN");
+
+  state={...state,workItems:[replacement]};
+  product=(await service.getProducts()).products[0]!;
+  assert.match(product.humanActionJa??"",/Issue #9/);assert.equal(product.humanSource?.issueNumber,9);
+
+  state={...state,workItems:[primary]};
+  product=(await service.getProducts()).products[0]!;
+  assert.equal(product.humanSource?.revision,"2026-09-05T00:00:00Z");
+
+  state={...state,syncMetadata:{"knys/repo":{...succeeded,status:"FAILED",failureType:"NETWORK",failureReason:"offline"}}};
+  product=(await service.getProducts()).products[0]!;
+  assert.equal(product.humanActionJa,null);assert.equal(product.humanGate,null);assert.equal(product.humanSource,null);assert.equal(product.stale,true);assert.match(product.syncWarning??"",/sync failed.*hidden/i);
 });
 
 test("never reports RUNNING without a matching active execution",async()=>{
@@ -90,7 +119,7 @@ test("product detail UI is structured, accessible, closable, and polling-safe",a
   assert.match(script,/event\.key!=="Tab"/);
   assert.match(script,/data-modal-close/);
   assert.match(script,/renderOpenProduct\(\);const states=/, "poll refresh rerenders an open detail from the same Product SSOT");
-  for(const heading of ["NEXT ACTION","HUMAN ACTION","HUMAN GATE / WHY HUMAN?","EXACT BLOCKER","RELATED WORK"])assert.match(script,new RegExp(heading.replace(/[?]/g,"\\?")));
+  for(const heading of ["NEXT ACTION","HUMAN ACTION","HUMAN GATE / WHY HUMAN?","SYNC WARNING","EXACT BLOCKER","RELATED WORK"])assert.match(script,new RegExp(heading.replace(/[?]/g,"\\?")));
   for(const heading of ["ACTIVE ACTOR","QUEUED ACTOR","CURRENT RUN","EXECUTION ID","BASE SHA","CANDIDATE SHA","DEPLOYED SHA"])assert.match(script,new RegExp(heading));
   assert.match(styles,/\.detail-body \{ overflow-y: auto/);
   assert.match(styles,/white-space: pre-wrap; overflow-wrap: anywhere/);
