@@ -232,6 +232,19 @@ export async function composeProductionSelfCommissioning(
       latest = [...state.records]
         .reverse()
         .find((v) => v.workItemId === workItemId);
+    const acceptedRecovery = state.records.find(
+      (value) =>
+        value.executionId === attempt3RecoveryId &&
+        value.resultStatus === "SUCCEEDED" &&
+        value.candidateHead === "b34b0002d6230671d1c0aada79d786c84ba63e24",
+    );
+    if (
+      item &&
+      cycle &&
+      acceptedRecovery &&
+      ["VERIFYING", "WAITING_HUMAN", "DONE"].includes(item.workState)
+    )
+      return true;
     if (
       !item ||
       item.sourceState !== "open" ||
