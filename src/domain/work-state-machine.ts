@@ -56,7 +56,7 @@ function decide(item: WorkItem, event: WorkEvent): { to: WorkState; ballHolder: 
     case "WORKER_UNAVAILABLE": if (item.workState === "READY" || item.workState === "RUNNING") { const holder = event.monitor; return { to: "WAITING_WORKER", ballHolder: holder, nextAction: action("WAIT_WORKER", "Wait for worker availability", holder, holder === "LCC", ["WORKER_MONITOR"]), reason, blocker: null }; } break;
     case "WORKER_AVAILABLE": if (item.workState === "WAITING_WORKER") return ready(event.executor); break;
     case "RETRYABLE_FAILURE": case "TERMINAL_FAILURE": if (["RUNNING", "VERIFYING", "RETRYING"].includes(item.workState)) return { to: "FAILED", ballHolder: "LCC", nextAction: action("INVESTIGATE", "Investigate execution failure", "LCC", true, ["DIAGNOSTICS"]), reason, blocker: null }; break;
-    case "RETRY_STARTED": if (item.workState === "FAILED") return { to: "RETRYING", ballHolder: "LCC", nextAction: action("RETRY", "Retry failed work", "LCC", true, ["RETRY"]), reason, blocker: null }; break;
+    case "RETRY_STARTED": if (item.workState === "FAILED") return { to: "RETRYING", ballHolder: "LCC", nextAction: action("RETRY", "Retry failed work", "LCC", true, ["CODE_EDIT"]), reason, blocker: null }; break;
     case "BLOCKER_SET": if (["DEFINED", "READY", "RUNNING", "VERIFYING", "FAILED", "RETRYING", "WAITING_HUMAN", "WAITING_WORKER"].includes(item.workState)) return { to: "BLOCKED", ballHolder: event.owner, nextAction: action("RESOLVE_BLOCKER", event.summary, event.owner, false), reason, blocker: event.summary }; break;
     case "BLOCKER_CLEARED": if (item.workState === "BLOCKED") return ready(event.executor); break;
     case "REOPENED": if (item.workState === "DONE") return ready(event.executor); break;

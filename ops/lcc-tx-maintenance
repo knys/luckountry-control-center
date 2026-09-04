@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+operation=${1-}
+repository=${2-}
+test "$operation" = "TX_LCC_DEPLOY_DISABLED" || test "$operation" = "TX_LCC_RESTART" || { echo "operation rejected" >&2; exit 64; }
+test "$repository" = "knys/luckountry-control-center" || { echo "repository rejected" >&2; exit 64; }
+source_root=/home/user/projects/luckountry-control-center
+target_root=/opt/luckountry-control-center
+service=luckountry-control-center.service
+systemctl set-environment WORK_AUTOMATION_MODE=disabled WORK_EXECUTION_ENABLED=false WORK_VERIFICATION_ENABLED=false
+if test "$operation" = "TX_LCC_RESTART"; then systemctl restart "$service"; echo '{"operation":"TX_LCC_RESTART","status":"SUCCEEDED"}'; exit 0; fi
+test -f "$source_root/dist/server.js" || { echo "bounded build artifact unavailable" >&2; exit 66; }
+install -d -o root -g root -m 0755 "$target_root" "$target_root/dist.next"
+find "$target_root/dist.next" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+cp -R "$source_root/dist/." "$target_root/dist.next/"
+chown -R root:root "$target_root/dist.next"
+if test -d "$target_root/dist.previous"; then find "$target_root/dist.previous" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; rmdir "$target_root/dist.previous"; fi
+if test -d "$target_root/dist"; then mv "$target_root/dist" "$target_root/dist.previous"; fi
+mv "$target_root/dist.next" "$target_root/dist"
+systemctl restart "$service"
+echo '{"operation":"TX_LCC_DEPLOY_DISABLED","status":"SUCCEEDED","automation":"disabled","execution":false,"verification":false}'

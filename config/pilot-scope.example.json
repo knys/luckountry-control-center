@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "cycleId": "pilot-YYYYMMDD-01",
+  "repository": "owner/repository",
+  "externalId": "123",
+  "workerId": "gtx1060",
+  "workspaceId": "product-workspace",
+  "verificationProfileId": "node-standard",
+  "baseBranch": "main",
+  "requiredLabels": ["lcc:pilot", "lcc:ready"],
+  "expiresAt": "2026-09-04T12:00:00+09:00",
+  "maxExecutionAttempts": 1,
+  "maxVerificationRuns": 1
+}

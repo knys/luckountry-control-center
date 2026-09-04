@@ -1,0 +1,552 @@
+import { join, resolve } from "node:path";
+import {
+  ExecutionService,
+  type ExecutionRepository,
+  type RepositoryExecutionTarget,
+} from "./application/execution.js";
+import {
+  AutomaticEvidenceReporter,
+  DurableEvidenceOutbox,
+  GitHubCommentTransport,
+} from "./application/evidence-reporting.js";
+import type { WorkItemRepository } from "./application/issue-sync-service.js";
+import {
+  assessPilotRemediation,
+  authorizeExpiryCompatibleFingerprint,
+  PilotReadinessService,
+} from "./application/pilot-control.js";
+import { ProductionSelfCommissioningControl } from "./application/production-self-commissioning.js";
+import {
+  DurableSelfCommissioningStore,
+  SelfCommissioningOrchestrator,
+  type CommissioningExecutors,
+  type SupervisorJob,
+  type SupervisorOperation,
+} from "./application/self-commissioning.js";
+import {
+  TxMaintenanceService,
+  reconcilePilotStore,
+} from "./application/tx-maintenance.js";
+import {
+  VerificationService,
+  type RepositoryVerificationTarget,
+  type VerificationRepository,
+} from "./application/verification.js";
+import {
+  parsePilotControl,
+  scopeFingerprint,
+  type PilotScope,
+} from "./domain/pilot.js";
+import { DurablePilotCycleRepository } from "./infrastructure/durable-pilot-cycle-repository.js";
+import {
+  RemoteCodexExecutor,
+  RemoteVerificationExecutor,
+  RemoteWorkerMaintenanceClient,
+  RemoteWorkerRegistry,
+  type RemoteWorkerConfig,
+} from "./infrastructure/remote-execution.js";
+import { FixedTxCommandRunner } from "./infrastructure/tx-command-runner.js";
+
+const workItemId = "github:knys/TOBIE:215",
+  cycleId = "pilot-20260903T075102Z-tobie-215",
+  failedExecutionId = "1b9ccd92-4d8a-4135-b445-d358ef83b326",
+  remediationId = `${cycleId}:${failedExecutionId}`,
+  attempt3Id = "5a4cda55-3713-40e2-81fe-869f6fbda400",
+  attempt3Base = "e902c4b466d74ae6ccc95ecd99f6aee123ea9c8d",
+  attempt3Branch = "lcc/pilot/215-5a4cda55",
+  attempt3RecoveryId = "recovered-5a4cda55";
+export const lcc008RenewedExpiresAt = "2026-09-04T23:00:00+09:00";
+type DurableRepository = WorkItemRepository &
+  ExecutionRepository &
+  VerificationRepository;
+export interface ProductionSelfCommissioningComposition {
+  control: ProductionSelfCommissioningControl;
+  token: string;
+  readiness(): Promise<true | string>;
+}
+
+export async function composeProductionSelfCommissioning(
+  repository: DurableRepository,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<ProductionSelfCommissioningComposition> {
+  const data = resolve(
+      environment.LCC_DATA_DIRECTORY?.trim() ||
+        "/var/lib/luckountry-control-center",
+    ),
+    pilotPath = resolve(
+      environment.WORK_PILOT_STATE_PATH?.trim() ||
+        join(data, "pilot-cycles.json"),
+    );
+  const runs = await DurableSelfCommissioningStore.open(
+      join(data, "self-commissioning-runs.json"),
+    ),
+    outbox = await DurableEvidenceOutbox.open(
+      join(data, "self-commissioning-github-outbox.json"),
+    ),
+    cycles = await DurablePilotCycleRepository.open(pilotPath);
+  const workerId = environment.WORKER_ID?.trim() || "",
+    baseUrl = environment.WORKER_URL?.trim() || "",
+    keyId = environment.WORKER_HMAC_KEY_ID?.trim() || "",
+    secret = environment.WORKER_HMAC_SECRET || "",
+    remote: RemoteWorkerConfig = {
+      workerId,
+      baseUrl,
+      credentials: { keyId, secret },
+    },
+    registry = new RemoteWorkerRegistry([remote]),
+    maintenance = new RemoteWorkerMaintenanceClient(remote),
+    remoteCodex = new RemoteCodexExecutor([remote], (name) =>
+      name === "knys/TOBIE" ? workerId : null,
+    ),
+    remoteVerification = new RemoteVerificationExecutor([remote], (name) =>
+      name === "knys/TOBIE" ? workerId : null,
+    );
+  const originalControl = parsePilotControl({
+      ...environment,
+      WORK_AUTOMATION_MODE: "pilot",
+      WORK_EXECUTION_ENABLED: "true",
+      WORK_VERIFICATION_ENABLED: "true",
+      WORK_PILOT_REMEDIATION_ID: remediationId,
+    }),
+    originalScope = originalControl.scope,
+    legacyScopeFingerprint = originalScope
+      ? scopeFingerprint(originalScope)
+      : null,
+    renewedScope = renewLcc008Expiry(originalScope),
+    fixedControl = parsePilotControl({
+      ...environment,
+      WORK_AUTOMATION_MODE: "pilot",
+      WORK_EXECUTION_ENABLED: "true",
+      WORK_VERIFICATION_ENABLED: "true",
+      WORK_PILOT_SCOPE_JSON: renewedScope
+        ? JSON.stringify(renewedScope)
+        : environment.WORK_PILOT_SCOPE_JSON,
+      WORK_PILOT_REMEDIATION_ID: remediationId,
+    }),
+    scope = fixedControl.scope;
+  if (scope && legacyScopeFingerprint && renewedScope)
+    authorizeExpiryCompatibleFingerprint(scope, legacyScopeFingerprint);
+  const tx = new TxMaintenanceService({
+    repositoryPath: resolve(
+      environment.LCC_REPOSITORY_PATH?.trim() ||
+        "/opt/luckountry-control-center",
+    ),
+    allowedRepository: "knys/luckountry-control-center",
+    allowedRefs: (environment.LCC_ALLOWED_UPDATE_REFS ?? "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => /^[0-9a-f]{40}$/i.test(v)),
+    storePath: join(data, "tx-maintenance-results.json"),
+    runner: new FixedTxCommandRunner(),
+    status: async () => ["TX LCC maintenance ready"],
+    migrate: async () => {
+      await DurablePilotCycleRepository.open(pilotPath);
+      return ["Pilot store readable"];
+    },
+    reconcile: async () =>
+      reconcilePilotStore(
+        cycles,
+        await repository.executionState(),
+        await repository.verificationState(),
+        async (id) => (await repository.findWorkItem(id))?.workState ?? null,
+        new Date().toISOString(),
+      ),
+  });
+  const target: RepositoryExecutionTarget | null = scope
+      ? {
+          repository: scope.repository,
+          workerId: scope.workerId,
+          workspaceId: scope.workspaceId,
+          requiredCapabilities: ["CODE_EDIT", "GIT", "NODE20"],
+          concurrency: "EXCLUSIVE_REPOSITORY",
+        }
+      : null,
+    verificationTarget: RepositoryVerificationTarget | null = scope
+      ? {
+          repository: scope.repository,
+          workerId: scope.workerId,
+          workspaceId: scope.workspaceId,
+          profileId: scope.verificationProfileId,
+          checkIds: ["test", "typecheck", "build", "diff-check"],
+        }
+      : null;
+  const execution = target
+      ? new ExecutionService(
+          repository,
+          [target],
+          registry,
+          remoteCodex,
+          Date.now,
+          undefined,
+          scope!,
+        )
+      : null,
+    verification = verificationTarget
+      ? new VerificationService(
+          repository,
+          [verificationTarget],
+          registry,
+          remoteVerification,
+        )
+      : null,
+    pilot = scope
+      ? new PilotReadinessService(
+          repository,
+          cycles,
+          fixedControl,
+          { workerReady: true, workspaceReady: true, profileReady: true },
+          Date.now,
+          () => repository.executionState(),
+          legacyScopeFingerprint,
+        )
+      : null;
+  const githubToken = environment.GITHUB_TOKEN || "",
+    reporter = new AutomaticEvidenceReporter(
+      outbox,
+      new GitHubCommentTransport(githubToken),
+      {
+        repository: "knys/luckountry-control-center",
+        issueNumber: 18,
+        pullNumber: 19,
+      },
+      3,
+    );
+  const readiness = async (): Promise<true | string> => {
+    if (
+      environment.WORK_AUTOMATION_MODE !== "disabled" ||
+      environment.WORK_EXECUTION_ENABLED !== "false" ||
+      environment.WORK_VERIFICATION_ENABLED !== "false"
+    )
+      return "Automation must be disabled before Self-Commissioning readiness";
+    if (!environment.SELF_COMMISSIONING_CONTROL_TOKEN)
+      return "Self-Commissioning mutation authentication is not configured";
+    if (!scope || !originalScope || !legacyScopeFingerprint || !renewedScope)
+      return "Exact LCC-008 Pilot scope is not configured";
+    if (!workerId || !baseUrl || !keyId || !secret)
+      return "GTX authenticated transport is not configured";
+    if (!githubToken) return "GitHub evidence reporter is not configured";
+    const item = await repository.findWorkItem(workItemId),
+      cycle = (await cycles.pilotCycles()).find((v) => v.cycleId === cycleId),
+      state = await repository.executionState(),
+      descriptor = await registry.get(workerId),
+      latest = [...state.records]
+        .reverse()
+        .find((v) => v.workItemId === workItemId);
+    if (
+      !item ||
+      item.sourceState !== "open" ||
+      !["FAILED", "RETRYING"].includes(item.workState) ||
+      !cycle
+    )
+      return "LCC-008 durable target is not readable";
+    if (cycle.scopeFingerprint !== legacyScopeFingerprint)
+      return "Approved expiry renewal does not match durable Pilot scope";
+    const pending =
+        cycle.remediationCount === 0 &&
+        !cycle.remediationConsumedAt &&
+        item.workState === "FAILED",
+      consumed =
+        cycle.remediationCount === 1 &&
+        cycle.remediationRequestId === remediationId &&
+        !!cycle.remediationConsumedAt &&
+        item.workState === "RETRYING";
+    if (
+      !["ARMED", "FAILED", "EXECUTING"].includes(cycle.status) ||
+      cycle.recoveryCount !== 1 ||
+      (!pending && !consumed) ||
+      latest?.executionId !== failedExecutionId ||
+      !["FAILED", "TIMED_OUT"].includes(latest.resultStatus)
+    )
+      return "Exact LCC-008 remediation history is not ready for reconciliation";
+    if (
+      !descriptor ||
+      descriptor.status !== "ONLINE" ||
+      !descriptor.workspaceIds.includes("tobie-pilot") ||
+      !descriptor.executorKinds.includes("CODEX") ||
+      !descriptor.executorKinds.includes("VERIFICATION") ||
+      !descriptor.verificationProfiles?.[scope.verificationProfileId]
+    )
+      return "GTX descriptor/workspace/verification profile is not ready";
+    return true;
+  };
+  let executionCountAfterKill: number | null = null;
+  const blocked = (reason: string) => ({
+    status: "BLOCKED" as const,
+    summary: reason,
+    evidence: [],
+    blocker: reason,
+  });
+  const recoverAttempt3 = async () => {
+    const executions = await repository.executionState();
+    const recovered = executions.records.find(
+      (value) =>
+        value.executionId === attempt3RecoveryId &&
+        value.resultStatus === "SUCCEEDED",
+    );
+    if (recovered)
+      return {
+        status: "SUCCEEDED" as const,
+        summary: "Verified attempt3 candidate recovery already durable",
+        evidence: [recovered.executionId, recovered.candidateHead ?? ""],
+      };
+    const failed = executions.records.find(
+      (value) => value.executionId === attempt3Id,
+    );
+    if (
+      !failed ||
+      failed.resultStatus !== "TIMED_OUT" ||
+      !repository.recoverVerifiedCandidate
+    )
+      return blocked("Exact timed-out attempt3 is not recoverable");
+    const result = await remoteVerification.execute({
+      verificationId: `recovery-${attempt3Id}`,
+      workItemId,
+      sourceExecutionId: attempt3Id,
+      repository: "knys/TOBIE",
+      workspaceId: "tobie-pilot",
+      profileId: "tobie-node",
+      checkIds: ["test", "typecheck", "build", "diff-check"],
+    });
+    if (result.status !== "PASSED" || !result.verifiedHead)
+      return blocked("Fixed recovery verification did not pass");
+    await repository.recoverVerifiedCandidate({
+      recoveryExecutionId: attempt3RecoveryId,
+      failedExecutionId: attempt3Id,
+      workItemId,
+      workerId,
+      baseHead: attempt3Base,
+      candidateBranch: attempt3Branch,
+      candidateHead: result.verifiedHead,
+      verifiedAt: result.finishedAt,
+      evidence: [
+        `source=${attempt3Id}`,
+        `verification=${result.verificationId}`,
+        ...result.checks.map((value) => `${value.checkId}=${value.status}`),
+      ],
+    });
+    return {
+      status: "SUCCEEDED" as const,
+      summary:
+        "Timed-out attempt3 candidate recovered through fixed independent verification",
+      evidence: [attempt3RecoveryId, result.verifiedHead],
+    };
+  };
+  const supervisor = async (operation: SupervisorOperation) => {
+    const item = await repository.findWorkItem(workItemId),
+      cycle = (await cycles.pilotCycles()).find((v) => v.cycleId === cycleId),
+      executions = await repository.executionState(),
+      verifications = await repository.verificationState(),
+      latest = [...executions.records]
+        .reverse()
+        .find((v) => v.workItemId === workItemId);
+    switch (operation) {
+      case "INSPECT_CURRENT_STATE":
+        return item && cycle && item.sourceState === "open"
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "Exact durable LCC-008 state inspected",
+              evidence: [
+                `cycle=${cycle.cycleId}`,
+                `executions=${executions.records.filter((v) => v.workItemId === workItemId).length}`,
+                `verifications=${verifications.records.filter((v) => v.workItemId === workItemId).length}`,
+              ],
+            }
+          : blocked("Exact LCC-008 durable state unavailable");
+      case "ASSERT_REMEDIATION_ELIGIBILITY": {
+        if (!item || !cycle || !scope)
+          return blocked("Remediation inputs unavailable");
+        const value = assessPilotRemediation(
+            fixedControl,
+            scope,
+            item,
+            cycle,
+            executions,
+            { workerReady: true, workspaceReady: true, profileReady: true },
+          ),
+          alreadyConsumed =
+            cycle.remediationRequestId === remediationId &&
+            cycle.remediationCount === 1 &&
+            !!cycle.remediationConsumedAt &&
+            item.workState === "RETRYING";
+        return (value.eligible && value.executionId === failedExecutionId) ||
+          alreadyConsumed
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: alreadyConsumed
+                ? "Exact remediation binding already consumed and resumable"
+                : "Exact remediation binding eligible",
+              evidence: [remediationId],
+            }
+          : blocked(value.reason);
+      }
+      case "ENABLE_BOUNDED_PILOT": {
+        if (!pilot) return blocked("Fixed Pilot scope unavailable");
+        const value = await pilot.evaluate();
+        return value.ready
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "Exact remediation consumed and bounded Pilot armed",
+              evidence: [remediationId],
+            }
+          : blocked(value.reason);
+      }
+      case "OBSERVE_EXECUTION":
+        return latest?.resultStatus === "SUCCEEDED"
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "Worker execution terminal result observed",
+              evidence: [latest.executionId],
+            }
+          : blocked("Expected successful terminal execution not observed");
+      case "INDEPENDENT_VERIFICATION": {
+        if (!verification)
+          return blocked("Fixed verification transport unavailable");
+        const result = await verification.verify(workItemId);
+        return result.status === "ELIGIBLE"
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "Independent verification completed",
+              evidence: [result.reason],
+            }
+          : blocked(result.reason);
+      }
+      case "ASSERT_PROMOTION_HOLD": {
+        const current = await repository.findWorkItem(workItemId),
+          check = [...(await repository.verificationState()).records]
+            .reverse()
+            .find((v) => v.workItemId === workItemId),
+          success = [...(await repository.executionState()).records]
+            .reverse()
+            .find(
+              (v) =>
+                v.workItemId === workItemId && v.resultStatus === "SUCCEEDED",
+            );
+        return current?.workState === "WAITING_HUMAN" &&
+          current.ballHolder === "HUMAN" &&
+          check?.status === "PASSED" &&
+          success?.candidateHead === check.verifiedHead &&
+          !!success.baseHead
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "Verified candidate held for Human promotion",
+              evidence: [
+                `candidateHead=${success.candidateHead}`,
+                `baseHead=${success.baseHead}`,
+              ],
+            }
+          : blocked("Promotion hold postconditions not satisfied");
+      }
+      case "KILL_SWITCH":
+        executionCountAfterKill = executions.records.filter(
+          (v) => v.workItemId === workItemId,
+        ).length;
+        return {
+          status: "SUCCEEDED" as const,
+          summary: "Bounded Pilot dispatch stopped",
+          evidence: [
+            "automation=disabled",
+            "execution=false",
+            "verification=false",
+          ],
+        };
+      case "POST_ACCEPTANCE_OBSERVATION":
+        return executionCountAfterKill !== null &&
+          executions.records.filter((v) => v.workItemId === workItemId)
+            .length === executionCountAfterKill
+          ? {
+              status: "SUCCEEDED" as const,
+              summary: "No additional or unrelated dispatch observed",
+              evidence: [`executionCount=${executionCountAfterKill}`],
+            }
+          : blocked("Additional execution observed after kill switch");
+      case "HUMAN_GATE":
+        return {
+          status: "WAITING_HUMAN" as const,
+          summary: "Promotion or merge approval required",
+          evidence: [],
+          humanGate:
+            "Approve or reject promotion/merge of the independently verified candidate only",
+        };
+    }
+  };
+  const executors: CommissioningExecutors = {
+    tx: async (request) => map(await tx.execute(request)),
+    gtx: async (request) => map(await maintenance.execute(request)),
+    codex: async (job, id) => {
+      if (
+        (job as SupervisorJob).operation as string ===
+        "RECOVER_TIMED_OUT_CANDIDATE"
+      )
+        return recoverAttempt3();
+      if ("operation" in job)
+        return supervisor((job as SupervisorJob).operation);
+      if (!execution) return blocked("Fixed execution transport unavailable");
+      const result = await execution.execute(workItemId);
+      return result.status === "ELIGIBLE"
+        ? {
+            status: "SUCCEEDED",
+            summary:
+              "Single CODEX_JOB completed through durable Worker execution",
+            evidence: [id],
+          }
+        : blocked(result.reason);
+    },
+  };
+  const orchestrator = new SelfCommissioningOrchestrator(runs, executors),
+    control = new ProductionSelfCommissioningControl(
+      runs,
+      orchestrator,
+      {
+        report: (run) =>
+          reporter
+            .collectAndReport(run, [
+              {
+                kind: "CONTROLLER",
+                status: run.status,
+                summary: "Production Self-Commissioning checkpoint",
+              },
+            ])
+            .then(() => undefined),
+      },
+      readiness,
+      environment.SELF_COMMISSIONING_ENABLED === "true",
+    );
+  await reporter.flush();
+  await control.resume();
+  return {
+    control,
+    token: environment.SELF_COMMISSIONING_CONTROL_TOKEN || "",
+    readiness,
+  };
+}
+export function renewLcc008Expiry(scope: PilotScope | null): PilotScope | null {
+  if (
+    !scope ||
+    scope.cycleId !== cycleId ||
+    scope.repository !== "knys/TOBIE" ||
+    scope.externalId !== "215" ||
+    scope.workerId !== "gtx1060" ||
+    scope.workspaceId !== "tobie-pilot" ||
+    scope.verificationProfileId !== "tobie-node" ||
+    scope.baseBranch !== "main" ||
+    scope.requiredLabels.length !== 2 ||
+    !["lcc:pilot", "lcc:ready"].every((value) =>
+      scope.requiredLabels.includes(value),
+    ) ||
+    scope.maxExecutionAttempts !== 1 ||
+    scope.maxVerificationRuns !== 1
+  )
+    return null;
+  return { ...scope, expiresAt: lcc008RenewedExpiresAt };
+}
+function map(result: { status: string; summary: string; evidence: string[] }) {
+  return {
+    status:
+      result.status === "SUCCEEDED"
+        ? ("SUCCEEDED" as const)
+        : ("FAILED" as const),
+    summary: result.summary,
+    evidence: result.evidence,
+    retryable: result.status === "TIMED_OUT",
+  };
+}
