@@ -23,13 +23,15 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>, executions?: () => Promise<ExecutionState>,verifications?:()=>Promise<VerificationState>,automationControl?:()=>Promise<{control:PilotControl;cycles:PilotCycle[];matchedWorkItemIds:string[];workerReady:boolean;recovery?:PilotRecoveryStatus}>,selfCommissioning?:{control:ProductionSelfCommissioningControl;token:string},commission?:{inbox:CommissionInbox;token:string;status:()=>Promise<WatcherStatus|null>}) {
+export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>, executions?: () => Promise<ExecutionState>,verifications?:()=>Promise<VerificationState>,automationControl?:()=>Promise<{control:PilotControl;cycles:PilotCycle[];matchedWorkItemIds:string[];workerReady:boolean;recovery?:PilotRecoveryStatus}>,selfCommissioning?:{control:ProductionSelfCommissioningControl;token:string},commission?:{inbox:CommissionInbox;token:string;status:()=>Promise<WatcherStatus|null>;recover?:(runId:string,input:unknown)=>Promise<unknown>;humanDecision?:(runId:string,input:unknown)=>Promise<unknown>}) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const path = new URL(request.url ?? "/", "http://localhost").pathname;
       if(path==="/api/commissions"&&request.method==="GET"&&commission)return json(response,200,{candidates:await commission.inbox.list()});
       if(path==="/api/commission-watcher"&&request.method==="GET"&&commission)return json(response,200,(await commission.status())??{state:"DEGRADED",failure:"status unavailable"});
       const commissionAction=path.match(/^\/api\/commissions\/([A-Za-z0-9-]+)\/commission$/);
+      const runControl=path.match(/^\/api\/commission-runs\/([A-Za-z0-9._-]{1,100})\/(recover|human-gate)$/);
+      if(commission&&runControl&&request.method==="POST"){if(!validControlToken(request,commission.token))return json(response,401,{error:"unauthorized"});const body=await requestJson(request);return json(response,202,runControl[2]==="recover"?await commission.recover?.(runControl[1]!,body):await commission.humanDecision?.(runControl[1]!,body));}
       if(commission&&((path==="/api/commissions"&&request.method==="POST")||(commissionAction&&request.method==="POST"))){if(!validControlToken(request,commission.token))return json(response,401,{error:"unauthorized"});return json(response,commissionAction?200:201,commissionAction?await commission.inbox.commission(commissionAction[1]!):await commission.inbox.register(await requestJson(request)));}
       if(path==="/api/self-commissioning"&&request.method==="GET"&&selfCommissioning)return json(response,200,{readiness:await selfCommissioning.control.readinessStatus(),runs:await selfCommissioning.control.list()});
       const createRun=path==="/api/self-commissioning/runs"&&request.method==="POST",runAction=path.match(/^\/api\/self-commissioning\/runs\/([A-Za-z0-9._-]{1,100})\/(start|cancel)$/);

@@ -16,11 +16,14 @@ export interface CodexJob {
   objective: string;
   repository: string;
   workspaceId: string;
+  issueNumber?: number;
+  sourceRevision?: string|null;
+  humanGate?: string|null;
   policy: {
     allowCommit: true;
-    allowPush: false;
-    allowMerge: false;
-    allowDeploy: false;
+    allowPush: boolean;
+    allowMerge: boolean;
+    allowDeploy: boolean;
   };
 }
 export type SupervisorOperation =
@@ -93,6 +96,10 @@ export class DurableSelfCommissioningStore {
       changed = true;
     }
     for (const v of value.runs) {
+      if (!v.run.recoveryBudget) {
+        v.run.recoveryBudget = { limit: 3, consumed: 0 };
+        changed = true;
+      }
       if (v.run.status === "RUNNING") {
         const step = v.steps.find((s) => s.stepId === v.run.currentStep);
         if (!step) throw Error("checkpoint unavailable");
@@ -182,6 +189,29 @@ export class DurableSelfCommissioningStore {
       return v;
     });
   }
+  async recover(id:string,input:{actor:string;reason:string;expectedFailure:string}) {
+    return this.update(n=>{
+      const v=n.runs.find(x=>x.run.runId===id);if(!v)throw Error("run absent");
+      if(v.run.status!=="BLOCKED"||!v.run.failedStep||!v.run.blocker)throw Error("run is not recoverable");
+      if(input.expectedFailure!==failureRevision(v.run))throw Error("failure revision mismatch");
+      if(!/^[A-Za-z0-9_.@-]{1,100}$/.test(input.actor)||!input.reason.trim()||input.reason.length>500)throw Error("invalid recovery request");
+      if(v.run.recoveryBudget.consumed>=v.run.recoveryBudget.limit)throw Error("recovery budget exhausted");
+      const step=v.steps.find(s=>s.stepId===v.run.failedStep);if(!step)throw Error("failed checkpoint unavailable");
+      v.run={...v.run,status:"QUEUED",currentStep:step.stepId,queuedActor:actor(step),queuedStep:step.stepId,failedStep:null,blocker:null,updatedAt:new Date().toISOString(),recoveryBudget:{...v.run.recoveryBudget,consumed:v.run.recoveryBudget.consumed+1},history:[...v.run.history,event("RECOVERED",`${input.actor}: ${input.reason}`,[`prior=${input.expectedFailure}`])]};
+      return v.run;
+    });
+  }
+  async humanDecision(id:string,input:{actor:string;decision:"OK"|"NG";reason?:string|undefined}) {
+    return this.update(n=>{
+      const v=n.runs.find(x=>x.run.runId===id);if(!v)throw Error("run absent");
+      if(v.run.status!=="WAITING_HUMAN"||!v.run.currentStep)throw Error("run is not waiting for Human");
+      if(!/^[A-Za-z0-9_.@-]{1,100}$/.test(input.actor)||input.reason&&input.reason.length>500)throw Error("invalid Human decision");
+      const step=v.steps.find(s=>s.stepId===v.run.currentStep);if(!step)throw Error("checkpoint unavailable");const at=new Date().toISOString();
+      if(input.decision==="OK")v.run={...v.run,status:"SUCCEEDED",currentStep:null,humanGate:null,completedSteps:[...new Set([...v.run.completedSteps,step.stepId])],updatedAt:at,history:[...v.run.history,event("HUMAN_GATE_OK",`${input.actor}: ${input.reason??"accepted"}`,[])]};
+      else v.run={...v.run,status:"QUEUED",queuedActor:actor(step),queuedStep:step.stepId,humanGate:null,updatedAt:at,history:[...v.run.history,event("HUMAN_GATE_NG",`${input.actor}: ${input.reason??"rejected; repair required"}`,[])]};
+      return v.run;
+    });
+  }
   private async update<T>(fn: (n: Snapshot) => T) {
     const op = this.pending.then(async () => {
       const n = structuredClone(this.snapshot),
@@ -229,6 +259,7 @@ export class SelfCommissioningOrchestrator {
         blocker: null,
         humanGate: null,
         retryBudget: { limit: i.retryLimit, consumed: 0 },
+        recoveryBudget: { limit: 3, consumed: 0 },
         history: [event("CREATED", "Durable objective registered", [])],
       };
     return this.store.create({ run, steps: structuredClone(i.steps) });
@@ -406,6 +437,7 @@ export class SelfCommissioningOrchestrator {
     return this.store.replace({ ...v, run });
   }
 }
+export function failureRevision(run:SelfCommissioningRun){return createHash("sha256").update(`${run.runId}\0${run.failedStep??""}\0${run.blocker??""}\0${run.retryBudget.consumed}`).digest("hex").slice(0,24)}
 function actor(s: SelfCommissioningStep): RunActor {
   return s.kind === "TX_OPERATION"
     ? "TX66KWH"
@@ -465,6 +497,9 @@ function unsafeJob(job: CodexJob) {
       "workspaceId",
       "policy",
       "operation",
+      "issueNumber",
+      "sourceRevision",
+      "humanGate",
     ]),
     policyKeys = Object.keys(job.policy);
   return (
@@ -474,9 +509,13 @@ function unsafeJob(job: CodexJob) {
     !job.objective.trim() ||
     policyKeys.length !== 4 ||
     job.policy.allowCommit !== true ||
-    job.policy.allowPush !== false ||
-    job.policy.allowMerge !== false ||
-    job.policy.allowDeploy !== false
+    typeof job.policy.allowPush!=="boolean" ||
+    typeof job.policy.allowMerge!=="boolean" ||
+    typeof job.policy.allowDeploy!=="boolean" ||
+    (job.issueNumber!==undefined&&(!Number.isInteger(job.issueNumber)||job.issueNumber<1)) ||
+    ((job.policy.allowPush||job.policy.allowMerge||job.policy.allowDeploy)&&(!job.issueNumber||!job.sourceRevision||!["knys/luckountry-control-center","knys/TOBIE"].includes(job.repository))) ||
+    (job.policy.allowMerge&&!job.policy.allowPush) ||
+    (job.policy.allowDeploy&&!job.policy.allowMerge)
   );
 }
 async function persist(path: string, v: Snapshot) {

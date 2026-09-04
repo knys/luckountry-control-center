@@ -18,6 +18,7 @@ export interface SelfCommissioningRun {
   blocker: string | null;
   humanGate: string | null;
   retryBudget: { limit: number; consumed: number };
+  recoveryBudget: { limit: number; consumed: number };
   history: unknown[];
 }
 
@@ -41,6 +42,7 @@ export function assertRunInvariant(run: SelfCommissioningRun): void {
   if (!Number.isSafeInteger(run.retryBudget.limit) || !Number.isSafeInteger(run.retryBudget.consumed) || run.retryBudget.limit < 0 || run.retryBudget.consumed < 0 || run.retryBudget.consumed > run.retryBudget.limit) {
     throw new InvalidSelfCommissioningRunError("retry budget must be bounded and cannot be over-consumed");
   }
+  if (!Number.isSafeInteger(run.recoveryBudget.limit) || !Number.isSafeInteger(run.recoveryBudget.consumed) || run.recoveryBudget.limit < 0 || run.recoveryBudget.consumed < 0 || run.recoveryBudget.consumed > run.recoveryBudget.limit) throw new InvalidSelfCommissioningRunError("recovery budget must be bounded and cannot be over-consumed");
   const active = run.activeActor !== null || run.activeExecutionId !== null;
   const queued = run.queuedActor !== null || run.queuedStep !== null;
   if (run.status === "RUNNING") {
