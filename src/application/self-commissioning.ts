@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { TxMaintenanceRequest } from "./tx-maintenance.js";
 import type { GtxMaintenanceRequest } from "../worker/maintenance.js";
@@ -114,6 +114,7 @@ export class DurableSelfCommissioningStore {
       assertRunInvariant(v.run);
     }
     if (changed) await persist(path, value);
+    else await chmod(path, 0o660);
     return new DurableSelfCommissioningStore(path, value);
   }
   async get(id: string) {
@@ -482,7 +483,11 @@ async function persist(path: string, v: Snapshot) {
   const temp = path + "." + randomUUID() + ".tmp";
   await writeFile(temp, JSON.stringify(v, null, 2) + "\n", {
     encoding: "utf8",
-    mode: 0o600,
+    mode: 0o660,
   });
   await rename(temp, path);
+  // The API and the dedicated Watcher intentionally use different OS users
+  // in the same restricted `luckountry` group. chmod after rename avoids the
+  // service umask silently removing the group-write bit from their shared SSOT.
+  await chmod(path, 0o660);
 }

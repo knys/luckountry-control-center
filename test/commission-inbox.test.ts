@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { CommissionInbox } from "../src/application/commission-inbox.js";
@@ -14,5 +14,9 @@ test("Commission Inbox is restart-safe, duplicate-safe, and Commission creates t
 
 test("Commission boundary rejects arbitrary repositories, states, issue-less execution, and credential-shaped payload fields",async context=>{const f=await fixture();context.after(f.cleanup);await assert.rejects(f.inbox.register({...candidate,repository:"other/repo"}),/allowlisted/);await assert.rejects(f.inbox.register({...candidate,commissionState:"RUNNING" as never}),/commissionState/);const issueLess=await f.inbox.register({...candidate,issueNumber:null,issueUrl:null,sourceRef:"conversation:bounded"});await assert.rejects(f.inbox.commission(issueLess.id),/bounded GitHub issue/);const stored=await f.inbox.register({...candidate,issueNumber:8,sourceRef:"manual",command:"sudo anything",cwd:"/",environment:{TOKEN:"secret"}} as never);assert.equal("command" in stored,false);assert.equal("cwd" in stored,false);assert.equal("environment" in stored,false)});
 test("prior completed Commission is migrated into the Dispatcher SSOT without redispatch",async context=>{const f=await fixture();context.after(f.cleanup);const item=await f.inbox.register({...candidate,issueNumber:30});const registrar=new DurableCommissionRunRegistrar(f.runsPath);await registrar.retainCompleted({...item,commissionState:"COMPLETED",runId:"run-prior"},"run-prior");const run=await(await DurableSelfCommissioningStore.open(f.runsPath)).get("run-prior");assert.equal(run?.status,"SUCCEEDED");assert.deepEqual(run?.completedSteps,["codex-job"])});
+
+test("Commission Run SSOT remains writable by the API and Watcher service group",async context=>{const f=await fixture();context.after(f.cleanup);const store=await DurableSelfCommissioningStore.open(f.runsPath);await store.setEnabled(true);assert.equal((await stat(f.runsPath)).mode&0o777,0o660)});
+
+test("opening a legacy private Commission Run SSOT migrates its service-group mode",async context=>{const f=await fixture();context.after(f.cleanup);await DurableSelfCommissioningStore.open(f.runsPath);await chmod(f.runsPath,0o600);await DurableSelfCommissioningStore.open(f.runsPath);assert.equal((await stat(f.runsPath)).mode&0o777,0o660)});
 
 test("Commission Inbox Dashboard renders structured candidates without an execution control surface",async()=>{const [markup,script]=await Promise.all([readFile("src/public/index.html","utf8"),readFile("src/public/app.ts","utf8")]);assert.match(markup,/COMMISSION INBOX/);for(const value of ["CANDIDATE \/ PRODUCT","SOURCE \/ ISSUE","SUGGESTED NEXT ACTION","WHY NOT COMMISSIONED \/ HUMAN ACTION"])assert.match(markup,new RegExp(value));assert.match(script,/inbox\.candidates\.map\(commissionRow\)/);assert.doesNotMatch(markup+script,/commission-command|commission-cwd|commission-environment|credential/i)});
