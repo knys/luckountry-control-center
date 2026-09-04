@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { DurableSelfCommissioningStore, SelfCommissioningOrchestrator, type CodexJob, type SelfCommissioningStep } from "./self-commissioning.js";
+import { DurableSelfCommissioningStore, SelfCommissioningOrchestrator, type CodexJob, type SelfCommissioningStep, type SupervisorJob, type SupervisorOperation } from "./self-commissioning.js";
 import { summarizeRun, type SelfCommissioningRun } from "../domain/self-commissioning-run.js";
 
 export const productionProfile="LCC008_REAL_ACCEPTANCE" as const;
@@ -37,14 +37,21 @@ export class ProductionSelfCommissioningControl {
 function profileSteps(runId:string):SelfCommissioningStep[]{
   const key=(value:string)=>runId+":"+value;
   const job:CodexJob={objective:"Complete LCC-008 AC-32 through AC-35 from durable state. Inspect actual state, preserve all history, and do not require Human command or log transport.",repository:"knys/TOBIE",workspaceId:"tobie-pilot",policy:{allowCommit:true,allowPush:false,allowMerge:false,allowDeploy:false}};
+  const op=(operation:SupervisorOperation):SupervisorJob=>({...job,objective:`LCC fixed supervisor operation: ${operation}`,operation});
   return[
-    {stepId:"tx-status",kind:"TX_OPERATION",request:{operation:"TX_LCC_STATUS",idempotencyKey:key("tx-status")}},
-    {stepId:"tx-migrate",kind:"TX_OPERATION",request:{operation:"TX_LCC_MIGRATE_PILOT_STORE",idempotencyKey:key("tx-migrate")}},
+    {stepId:"inspect-current-state",kind:"SUPERVISOR_OPERATION",job:op("INSPECT_CURRENT_STATE")},
     {stepId:"tx-reconcile",kind:"TX_OPERATION",request:{operation:"TX_LCC_RECONCILE",idempotencyKey:key("tx-reconcile")}},
-    {stepId:"gtx-status",kind:"GTX_OPERATION",request:{operation:"GTX_WORKER_STATUS",idempotencyKey:key("gtx-status")}},
-    {stepId:"gtx-descriptor",kind:"GTX_OPERATION",request:{operation:"GTX_WORKER_DESCRIPTOR",idempotencyKey:key("gtx-descriptor")}},
+    {stepId:"assert-remediation-eligibility",kind:"SUPERVISOR_OPERATION",job:op("ASSERT_REMEDIATION_ELIGIBILITY")},
     {stepId:"gtx-preflight",kind:"GTX_OPERATION",request:{operation:"GTX_WORKSPACE_PREFLIGHT",idempotencyKey:key("gtx-preflight"),workspaceId:"tobie-pilot"}},
-    {stepId:"codex-job",kind:"CODEX_JOB",job}
+    {stepId:"gtx-descriptor",kind:"GTX_OPERATION",request:{operation:"GTX_WORKER_DESCRIPTOR",idempotencyKey:key("gtx-descriptor")}},
+    {stepId:"enable-bounded-pilot",kind:"SUPERVISOR_OPERATION",job:op("ENABLE_BOUNDED_PILOT")},
+    {stepId:"codex-job",kind:"CODEX_JOB",job},
+    {stepId:"observe-execution",kind:"SUPERVISOR_OPERATION",job:op("OBSERVE_EXECUTION")},
+    {stepId:"independent-verification",kind:"SUPERVISOR_OPERATION",job:op("INDEPENDENT_VERIFICATION")},
+    {stepId:"assert-promotion-hold",kind:"SUPERVISOR_OPERATION",job:op("ASSERT_PROMOTION_HOLD")},
+    {stepId:"kill-switch",kind:"SUPERVISOR_OPERATION",job:op("KILL_SWITCH")},
+    {stepId:"post-acceptance-observation",kind:"SUPERVISOR_OPERATION",job:op("POST_ACCEPTANCE_OBSERVATION")},
+    {stepId:"human-gate",kind:"SUPERVISOR_OPERATION",job:op("HUMAN_GATE")}
   ];
 }
 function view(run:SelfCommissioningRun):ProductionControlView { const summary=summarizeRun(run);return{profile:productionProfile,runId:run.runId,objective:run.objective,status:run.status,currentStep:run.currentStep,activeActor:run.activeActor,activeExecutionId:run.activeExecutionId,completedSteps:[...run.completedSteps],retryUsage:{...run.retryBudget},blocker:run.blocker,humanGate:run.humanGate,updatedAt:run.updatedAt,ballHolder:summary.ballHolder,ongoing:summary.ongoing} }
