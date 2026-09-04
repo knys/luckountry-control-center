@@ -5,6 +5,7 @@
       "id": "padchin-android",
       "name": "PADCHIN Android",
       "repository": "knys/PADCHIN",
+      "primaryIssue": 95,
       "summary": "主要機能はmainへ統合済み。DEV署名継続性の復元がHuman Acceptance再開の前提。",
       "status": "READY",
       "ball": "CODEX",
@@ -14,15 +15,19 @@
       "id": "padchin-pwa",
       "name": "PADCHIN PWA",
       "repository": "knys/PADCHIN-PWA",
+      "primaryIssue": 8,
       "summary": "Android主要UXのPWA同期とProduction反映を進行中。最終段はiPhone Standalone Human Acceptance。",
       "status": "ACCEPTANCE",
       "ball": "HUMAN",
-      "nextAction": "Issue #8/#4: iPhone Standaloneで主要導線と保存継続をHuman Acceptanceする"
+      "nextAction": "Issue #8: iPhone Standaloneで主要導線と保存継続をHuman Acceptanceする",
+      "humanActionJa": "iPhoneのSafariでPADCHIN PWAをホーム画面からStandalone起動し、現在地から施設を選んで保存後、アプリを再起動して履歴が残ることを確認し、Issue #8へPASS/FAILと観察結果を記録する",
+      "humanGate": "iPhone実機のStandalone動作、位置情報許可、タッチ操作の体感は接続済み自動化では判定できない"
     },
     {
       "id": "tobie-draw",
       "name": "TOBIE DRAW",
       "repository": "knys/TOBIE",
+      "primaryIssue": 66,
       "workItemMatch": ["DRAW"],
       "summary": "DRAW基盤は稼働中。送信先サーバー明示化など改善Issueが残っている。",
       "status": "READY",
@@ -33,36 +38,44 @@
       "id": "tobie-wall",
       "name": "TOBIE WALL",
       "repository": "knys/TOBIE",
+      "primaryIssue": 46,
       "workItemMatch": ["WALL"],
       "summary": "WALL基盤は実装済み。TOBIE BOX実機での自動起動・長時間安定性など最終Acceptanceが残る。",
       "status": "ACCEPTANCE",
       "ball": "HUMAN",
-      "nextAction": "Issue #46/#8: TOBIE BOX + HDMIでHOME/WALL自動起動と長時間安定性を実機確認する"
+      "nextAction": "Issue #46: TOBIE BOX + HDMIでHOME/WALL自動起動と長時間安定性を実機確認する",
+      "humanActionJa": "TOBIE BOXをHDMIディスプレイへ接続して再起動し、HOMEからWALLが自動表示されることと30分後も描画・操作が継続することを目視し、Issue #46へPASS/FAILと異常内容を記録する",
+      "humanGate": "HDMI実機表示と長時間の目視安定性は接続済みテレメトリだけでは判定できない"
     },
     {
       "id": "tobie-battle",
       "name": "TOBIE BATTLE",
       "repository": "knys/TOBIE",
+      "primaryIssue": 131,
       "workItemMatch": ["BATTLE"],
       "summary": "1060 DEV側の主要Acceptanceは通過。Raspberry Pi production / TV最終Acceptance待ち。",
       "status": "ACCEPTANCE",
       "ball": "HUMAN",
-      "nextAction": "Issue #131: Pi/TV + iPhone/Fire Tabletでproduction Acceptanceを完了する"
+      "nextAction": "Issue #131: Pi/TV + iPhone/Fire Tabletでproduction Acceptanceを完了する",
+      "humanActionJa": "TOBIE BOXをTVへ接続してBATTLEを開き、iPhoneとFire Tabletから各1体を操作して対戦し、TV表示・入力遅延・勝敗演出を観察してIssue #131へPASS/FAILを記録する",
+      "humanGate": "複数の物理端末を使う操作感とTV上の演出品質は人間の主観Acceptanceが必要"
     },
     {
       "id": "tobie-race",
       "name": "TOBIE RACE",
       "repository": "knys/TOBIE",
+      "primaryIssue": 190,
       "workItemMatch": ["RACE"],
       "summary": "Web版からUE5版への全面刷新を開始。M0〜M6へ分解済みで、Windows GTX1060のM0が次工程。",
       "status": "READY",
       "ball": "CODEX",
-      "nextAction": "Issue #191: UE5 Windows GrayboxをGTX1060で起動・走行・Development buildまで成立させる"
+      "nextAction": "Issue #190: UE5刷新epicの次の未完了milestoneを確定し、GTX1060で実装を開始する"
     },
     {
       "id": "tobie-keiba",
       "name": "TOBIE KEIBA",
       "repository": "knys/TOBIE",
+      "primaryIssue": 174,
       "workItemMatch": ["KEIBA"],
       "summary": "競馬体験の主要機能は段階的に統合済み。Recovery・Telemetry・最終実機Acceptanceを継続中。",
       "status": "READY",
@@ -73,6 +86,7 @@
       "id": "tobie-ios-host",
       "name": "TOBIE iOS HOST",
       "repository": "knys/TOBIE-IOS-HOST",
+      "primaryIssue": 1,
       "summary": "Phase 0 PoC定義済み。iPhoneをローカルHTTP/WebSocket hostにする実装・実機検証が未完。",
       "status": "READY",
       "ball": "CODEX",
@@ -84,13 +98,15 @@
       "repository": null,
       "summary": "Control Centerから参照するcanonical GitHub repositoryを特定できていない。",
       "status": "BLOCKED",
-      "ball": "HUMAN",
-      "nextAction": "BAREPOのcanonical GitHub repositoryを確定してmanifestへ登録する"
+      "ball": "LCC",
+      "nextAction": "既存設定、ローカルworkspace、GitHub repository一覧からBAREPOのcanonical repositoryを特定する",
+      "blocker": "Product名BAREPOに対応するcanonical GitHub repositoryの証拠がmanifestとdurable stateに存在しない"
     },
     {
       "id": "luckountry-website",
       "name": "Luckountry Website",
       "repository": "knys/luckountry-web",
+      "primaryIssue": 7,
       "summary": "公式サイトはv2デザイン刷新IssueがOpen。白基調・巨大タイポ・motion中心の再設計が次工程。",
       "status": "READY",
       "ball": "CODEX",
@@ -100,10 +116,11 @@
       "id": "luckountry-control-center",
       "name": "Luckountry Control Center",
       "repository": "knys/luckountry-control-center",
+      "primaryIssue": 26,
       "summary": "v0.3でDEVICE 3台監視とPRODUCT CONTROLを実装済み。実機3台はONLINE。GitHub metadataの本番認証だけ未整備。",
-      "status": "WAITING",
-      "ball": "HUMAN",
-      "nextAction": "systemd実行ユーザーluckountryへread-only GitHub認証を安全に提供し、stale:falseを確認する"
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Issue #26のDashboard改善を実装・検証し、mainへ統合してproductionへdeployする"
     }
   ]
 }

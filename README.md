@@ -16,7 +16,9 @@ Open `http://localhost:3000`. API endpoints are `GET /health`, `GET /api/devices
 
 ## Product Control SSOT
 
-`config/products.json` is the allowlisted product manifest. Humans or ChatGPT maintain the semantic fields (`summary`, `status`, `ball`, and `nextAction`). The server supplements those fields with the default branch, HEAD SHA, open Issue/PR counts, repository URL, and repository update time through one read-only `gh api graphql` process per cache refresh. GitHub credentials never enter an API response or browser code. If GitHub is unavailable, the server returns its latest in-memory metadata with `stale: true`; product and device endpoints remain independent.
+`config/products.json` is the bounded Product policy manifest. Durable WorkItems and execution records are the runtime SSOT for the current Issue, state, actor, and run. The manifest selects a Product's primary Issue where a repository contains several products and preserves only genuine physical/subjective Human gates (`humanActionJa` and `humanGate`). `ProductService` deterministically materializes `issueNumber`, `issueUrl`, `relatedIssues`, `nextActionJa`, `humanActionJa`, `queuedActor`, `activeActor`, and `currentRun`; it never invokes an LLM during rendering. A `DEFINED` Issue is shown as queued for LCC rather than incorrectly assigning routine definition work to Human. `RUNNING` is emitted only for a matching durable ACTIVE execution.
+
+The server supplements this state with default branch, HEAD SHA, open Issue/PR counts, repository URL, and repository update time through one read-only `gh api graphql` process per cache refresh. GitHub credentials never enter an API response or browser code. If GitHub is unavailable, the server returns its latest in-memory metadata with `stale: true`; product and device endpoints remain independent.
 
 Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE`, and `UNKNOWN`. Valid ball owners are `CHATGPT`, `CODEX`, `HUMAN`, `EXTERNAL`, `NONE`, and `UNKNOWN`. Multiple products may reference the same repository. Restart the service after changing the manifest.
 

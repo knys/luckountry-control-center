@@ -8,10 +8,10 @@ export const productBalls = ["CHATGPT", "CODEX", "LCC", "HUMAN", "EXTERNAL", "NO
 export type ProductState = typeof productStatuses[number];
 export type ProductBall = typeof productBalls[number];
 
-export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string; workItemMatch?:string[] }
+export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string; workItemMatch?:string[]; primaryIssue?:number; humanActionJa?:string; humanGate?:string; blocker?:string }
 export interface ProductsManifest { version: 1; products: ProductManifestItem[] }
 export interface GitHubMetadata { repository: string; repositoryUrl: string; defaultBranch: string | null; headSha: string | null; openIssues: number; openPullRequests: number; updatedAt: string }
-export interface ProductStatus extends ProductManifestItem { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; activeActor:string|null;currentRun:string|null;blocker:string|null;humanGate:string|null;latestGitHubEvidence:string|null }
+export interface ProductStatus extends Omit<ProductManifestItem,"humanActionJa"|"humanGate"|"blocker"> { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; issueNumber:number|null;issueUrl:string|null;relatedIssues:{number:number;url:string;title:string;state:string}[];nextActionJa:string;humanActionJa:string|null;activeActor:string|null;queuedActor:string|null;currentRun:string|null;blocker:string|null;humanGate:string|null;latestGitHubEvidence:string|null }
 export interface ProductsResponse { timestamp: string; cacheUpdatedAt: string | null; stale: boolean; warning: string | null; products: ProductStatus[] }
 export interface GitHubMetadataProvider { fetch(repositories: readonly string[]): Promise<Map<string, GitHubMetadata>> }
 
@@ -33,7 +33,10 @@ export function parseProductsManifest(value: unknown): ProductsManifest {
     if (item.repository !== null && (!nonEmpty(item.repository) || !repositoryPattern.test(item.repository))) throw new Error(`invalid repository at index ${index}`);
     const workItemMatch=item.workItemMatch;
     if(workItemMatch!==undefined&&(!Array.isArray(workItemMatch)||workItemMatch.length===0||workItemMatch.some(value=>!nonEmpty(value)||value.length>100)))throw new Error(`invalid work item match at index ${index}`);
-    return { id: item.id, name: item.name, repository: item.repository as string | null, summary: item.summary, status: item.status as ProductState, ball: item.ball as ProductBall, nextAction: item.nextAction,...(workItemMatch?{workItemMatch:[...workItemMatch]}:{}) };
+    const primaryIssue=item.primaryIssue,humanActionJa=item.humanActionJa,humanGate=item.humanGate,blocker=item.blocker;
+    if(primaryIssue!==undefined&&(typeof primaryIssue!=="number"||!Number.isSafeInteger(primaryIssue)||primaryIssue<1))throw new Error(`invalid primary issue at index ${index}`);
+    for(const field of ["humanActionJa","humanGate","blocker"] as const)if(item[field]!==undefined&&!nonEmpty(item[field]))throw new Error(`invalid ${field} at index ${index}`);
+    return { id: item.id, name: item.name, repository: item.repository as string | null, summary: item.summary, status: item.status as ProductState, ball: item.ball as ProductBall, nextAction: item.nextAction,...(workItemMatch?{workItemMatch:[...workItemMatch]}:{}),...(typeof primaryIssue==="number"?{primaryIssue}:{}),...(nonEmpty(humanActionJa)?{humanActionJa}:{}),...(nonEmpty(humanGate)?{humanGate}:{}),...(nonEmpty(blocker)?{blocker}:{}) };
   });
   return { version: 1, products };
 }
@@ -103,9 +106,33 @@ export class ProductService {
     const portfolio=await this.portfolio?.().catch(()=>undefined);
     return { timestamp: new Date(this.now()).toISOString(), cacheUpdatedAt: this.cacheUpdatedAt, stale, warning: this.warning, products: this.manifest.products.map((product) => {
       const github = product.repository ? this.metadata.get(product.repository) : undefined;
-      const candidates=portfolio?.workItems.filter(value=>value.source.repository===product.repository&&matchesProductWorkItem(product,value))??[],rank=(value:PortfolioWork)=>["RUNNING","VERIFYING","RETRYING","READY","WAITING_WORKER","WAITING_HUMAN","BLOCKED","FAILED","DEFINED","DONE"].indexOf(value.workState),work=[...candidates].sort((a,b)=>rank(a)-rank(b))[0],execution=work?[...(portfolio?.executions??[])].reverse().find(value=>value.workItemId===work.id&&["ACTIVE"].includes(value.resultStatus)):undefined,derivedStatus:ProductState|undefined=execution?"RUNNING":work?.workState==="READY"||work?.workState==="RETRYING"?"QUEUED":work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":undefined;
-      return { ...product,...(derivedStatus?{status:derivedStatus}:{}),...(work?{ball:(execution?"CODEX":work.ballHolder) as ProductBall,nextAction:work.nextAction.summary}:{}), repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:execution?"CODEX":null,currentRun:execution?.executionId??null,blocker:work?.blocker??(work?.workState==="FAILED"?work.nextAction.summary:null),humanGate:work?.workState==="WAITING_HUMAN"?work.nextAction.summary:null,latestGitHubEvidence:work?.sourceUrl??github?.repositoryUrl??null };
+      const candidates=portfolio?.workItems.filter(value=>value.source.repository===product.repository&&matchesProductWorkItem(product,value))??[];
+      const active=[...(portfolio?.executions??[])].reverse().find(value=>value.resultStatus==="ACTIVE"&&candidates.some(work=>work.id===value.workItemId));
+      const rank=(value:PortfolioWork)=>["RUNNING","VERIFYING","RETRYING","READY","WAITING_WORKER","WAITING_HUMAN","BLOCKED","FAILED","DEFINED","DONE"].indexOf(value.workState);
+      const work=(active?candidates.find(value=>value.id===active.workItemId):undefined)??candidates.find(value=>Number(value.source.externalId)===product.primaryIssue)??[...candidates].sort((a,b)=>rank(a)-rank(b))[0];
+      const explicitHuman=product.ball==="HUMAN"&&product.status==="ACCEPTANCE"&&!!product.humanActionJa&&!!product.humanGate;
+      const status:ProductState=active&&work?"RUNNING":explicitHuman?"ACCEPTANCE":work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":work?"QUEUED":product.status==="RUNNING"?"READY":product.status;
+      const ball:ProductBall=active&&work?"CODEX":explicitHuman||work?.workState==="WAITING_HUMAN"?"HUMAN":work?((work.ballHolder==="CODEX"?"CODEX":"LCC") as ProductBall):product.ball;
+      const issueNumber=work&&/^\d+$/.test(work.source.externalId)?Number(work.source.externalId):product.primaryIssue??null;
+      const issueUrl=work?.sourceUrl??(issueNumber&&product.repository?`https://github.com/${product.repository}/issues/${issueNumber}`:null);
+      const nextActionJa=deriveNextActionJa(product,work,status,issueNumber,ball);
+      const humanActionJa=ball==="HUMAN"?(product.humanActionJa??(work?`Issue #${issueNumber}「${work.title}」について、指定された実機または画面で完了条件を確認し、観察結果とPASS/FAILを記録する`:null)):null;
+      const humanGate=ball==="HUMAN"?(product.humanGate??(work?.workState==="WAITING_HUMAN"?`Issue #${issueNumber}は自動検証後のHuman Acceptanceを必要としている`:null)):null;
+      const blocker=status==="BLOCKED"?(work?.blocker??product.blocker??(work?`Issue #${issueNumber} が ${work.workState}: ${work.nextAction.summary}`:null)):null;
+      const relatedIssues=candidates.filter(value=>value!==work).slice(0,20).map(value=>({number:Number(value.source.externalId),url:value.sourceUrl,title:value.title,state:value.workState})).filter(value=>Number.isSafeInteger(value.number));
+      return { ...product,status,ball,nextAction:nextActionJa,nextActionJa,humanActionJa,issueNumber,issueUrl,relatedIssues,repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:active&&work?"CODEX":null,queuedActor:status==="QUEUED"?(ball==="CODEX"?"CODEX":"LCC"):null,currentRun:active&&work?active.executionId:null,blocker,humanGate,latestGitHubEvidence:issueUrl??github?.repositoryUrl??null };
     }) };
   }
 }
 function matchesProductWorkItem(product:ProductManifestItem,work:PortfolioWork):boolean{if(!product.workItemMatch)return true;const haystack=`${work.title} ${work.id}`.toLocaleLowerCase();return product.workItemMatch.some(value=>haystack.includes(value.toLocaleLowerCase()));}
+function deriveNextActionJa(product:ProductManifestItem,work:PortfolioWork|undefined,status:ProductState,issue:number|null,ball:ProductBall):string{
+  if(!work)return product.nextAction;
+  const ref=issue?`Issue #${issue}`:"対象Issue",title=`「${work.title}」`;
+  if(status==="RUNNING")return `${ref}${title}の実装をCodexで継続し、完了後にtest・typecheck・buildとcandidate commitを検証する`;
+  if(status==="ACCEPTANCE")return `${ref}${title}の自動検証済み成果を、Human Actionの手順で実機Acceptanceする`;
+  if(status==="BLOCKED")return `${ref}${title}の失敗・阻害根拠を確認し、記録されたblockerを解消して再実行する`;
+  if(work.workState==="VERIFYING")return `${ref}${title}のcandidateに対して自動テスト・typecheck・buildを完了する`;
+  if(work.workState==="RETRYING")return `${ref}${title}の直近失敗根拠を反映してLCCから安全に再実行する`;
+  if(work.workState==="DEFINED")return `${ref}${title}のAcceptance CriteriaをIssueと現行コードから確定し、Coding Readyへ進める`;
+  return `${ref}${title}を${ball==="CODEX"?"Codex":"LCC"}で実行し、自動テストとbuildで完了条件を検証する`;
+}

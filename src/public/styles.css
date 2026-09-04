@@ -198,7 +198,7 @@ h1 span {
 }
 .product-row {
   display: grid;
-  grid-template-columns: 1.05fr 0.66fr 0.56fr 1fr 1.45fr 1.25fr 1.25fr;
+  grid-template-columns: .9fr .58fr .48fr .48fr .85fr 1.35fr 1.35fr 1.1fr 1.05fr;
   min-height: 38px;
   align-items: center;
   border-bottom: 1px solid #193038;
@@ -285,6 +285,17 @@ h1 span {
 .next {
   color: #f2f7f8;
 }
+.next,
+.human-action,
+.gate {
+  white-space: normal !important;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.25;
+}
+.human-action { color: var(--amber); }
+.issue a { color: var(--cyan); text-decoration: none; font-weight: 700; }
 .repo {
   font-size: 10px !important;
 }
