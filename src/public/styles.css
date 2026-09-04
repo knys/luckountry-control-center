@@ -205,7 +205,14 @@ h1 span {
   font-size: 8px;
 }
 .product-table {
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-x pan-y;
+}
+.product-table:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
 }
 .product-row {
   display: grid;
@@ -231,6 +238,9 @@ h1 span {
   font-size: 12px;
 }
 .product-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   min-height: 24px;
   color: var(--muted);
   background: #0e2025;
@@ -392,6 +402,10 @@ footer {
   .product-table {
     height: auto;
     overflow-x: auto;
+  }
+  .product-table {
+    max-height: min(60vh, 36rem);
+    overflow-y: auto;
   }
   .device-row {
     min-width: 1050px;
