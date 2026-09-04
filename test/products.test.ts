@@ -85,6 +85,17 @@ test("product detail UI is structured, accessible, closable, and polling-safe",a
   assert.match(styles,/white-space: pre-wrap; overflow-wrap: anywhere/);
 });
 
+test("PRODUCTS is an independently scrollable, polling-stable accessible region",async()=>{
+  const [markup,script,styles]=await Promise.all([readFile("src/public/index.html","utf8"),readFile("src/public/app.ts","utf8"),readFile("src/public/styles.css","utf8")]);
+  assert.match(markup,/class="product-table" tabindex="0" role="region" aria-label="Scrollable products list"/);
+  assert.match(styles,/\.product-table \{[\s\S]*?overflow: auto;[\s\S]*?scrollbar-gutter: stable;[\s\S]*?touch-action: pan-x pan-y;/);
+  assert.match(styles,/\.product-header \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+  assert.match(styles,/@media \(max-width: 900px\)[\s\S]*?\.product-table \{[\s\S]*?max-height: min\(60vh, 36rem\);[\s\S]*?overflow-y: auto;/);
+  assert.doesNotMatch(script,/\.product-table[^\n]*scrollTop|scrollTop\s*=\s*0/, "polling must not reset the table scroll position");
+  assert.match(script,/data-product-id=.*tabindex="0" role="button"/, "rows remain keyboard actionable after scrolling");
+  assert.match(styles,/\.commission-table \{[^}]*overflow-y: auto;/, "Commission Inbox scrolling remains intact");
+});
+
 test("validates product status and ball", () => {
   assert.throws(() => parseProductsManifest({ version: 1, products: [{ ...item, status: "BROKEN" }] }), /status/);
   assert.throws(() => parseProductsManifest({ version: 1, products: [{ ...item, ball: "ROBOT" }] }), /ball/);
