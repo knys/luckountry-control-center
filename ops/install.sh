@@ -7,6 +7,7 @@ install -d -o root -g root -m 0750 /etc/luckountry-control-center
 install -d -o luckountry -g luckountry -m 0750 /var/lib/luckountry-control-center
 cp -R dist/. /opt/luckountry-control-center/dist/
 install -o root -g root -m 0755 ops/luckountry-smart-status /usr/local/libexec/luckountry-smart-status
+install -o root -g root -m 0755 ops/lcc-tx-maintenance /usr/local/libexec/lcc-tx-maintenance
 install -o root -g root -m 0440 ops/luckountry-control-center.sudoers /etc/sudoers.d/luckountry-control-center
 visudo -cf /etc/sudoers.d/luckountry-control-center
 install -o root -g root -m 0644 ops/luckountry-control-center.service /etc/systemd/system/luckountry-control-center.service
