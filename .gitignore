@@ -5,3 +5,4 @@ dist/
 *.log
 .worker-runtime/
 .DS_Store
+.lcc-preserve/
