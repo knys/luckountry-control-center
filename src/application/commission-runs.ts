@@ -27,7 +27,7 @@ const profiles={
 
 export class BoundedLocalCodexExecutor {
   private child:ReturnType<typeof spawn>|null=null;
-  constructor(private workspaceRoot:string,private codexPath="/usr/local/bin/codex",private run:FixedRunner=defaultRunner,private deploy:()=>Promise<boolean>=requestInternalDeploy){}
+  constructor(private workspaceRoot:string,private codexPath="/usr/local/bin/codex",private run:FixedRunner=defaultRunner,private deploy:()=>Promise<boolean>=requestInternalDeploy,private timeoutMs=0){}
   async execute(job:CodexJob):Promise<CommissioningResult>{
     const profile=profiles[job.repository as keyof typeof profiles];if(!profile)return{status:"BLOCKED",summary:"repository has no promotion profile",evidence:[]};
     const cwd=join(this.workspaceRoot,workspaceId(job.repository));await mkdir(this.workspaceRoot,{recursive:true});
@@ -43,7 +43,7 @@ export class BoundedLocalCodexExecutor {
     if(job.humanGate)return{status:"WAITING_HUMAN",summary:"Automated implementation, promotion and deploy completed",evidence:[...post.evidence,...promoted.evidence],humanGate:job.humanGate};
     return{status:"SUCCEEDED",summary:"Committed candidate passed independent checks and promotion",evidence:[...post.evidence,...promoted.evidence]};
   }
-  private codex(prompt:string,cwd:string){return new Promise<Output>(resolve=>{const child=spawn(this.codexPath,["exec","--approve-for-me",prompt],{cwd,stdio:"inherit",shell:false});this.child=child;let settled=false;const done=(x:Output)=>{if(settled)return;settled=true;this.child=null;resolve(x)};child.once("exit",code=>done({code:code??1,stdout:"",stderr:""}));child.once("error",error=>done({code:1,stdout:"",stderr:error.message}))})}
+  private codex(prompt:string,cwd:string){return new Promise<Output>(resolve=>{const child=spawn(this.codexPath,["exec","--approve-for-me",prompt],{cwd,stdio:"inherit",shell:false});this.child=child;let settled=false,timer:NodeJS.Timeout|undefined;const done=(x:Output)=>{if(settled)return;settled=true;if(timer)clearTimeout(timer);this.child=null;resolve(x)};if(this.timeoutMs>0)timer=setTimeout(()=>{child.kill("SIGTERM");done({code:124,stdout:"",stderr:"bounded Codex timeout"})},this.timeoutMs);child.once("exit",code=>done({code:code??1,stdout:"",stderr:""}));child.once("error",error=>done({code:1,stdout:"",stderr:error.message}))})}
   stop(){this.child?.kill("SIGTERM")}
 }
 

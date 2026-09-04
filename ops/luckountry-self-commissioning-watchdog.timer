@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Luckountry Self-Commissioning Watchdog every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+Unit=luckountry-self-commissioning-watchdog.service
+
+[Install]
+WantedBy=timers.target
