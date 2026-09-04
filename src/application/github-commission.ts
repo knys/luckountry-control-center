@@ -37,12 +37,10 @@ export class GitHubCommissionScanner {
       if(!(githubCommissionRepositories as readonly string[]).includes(repository))throw new Error("repository is not allowlisted");
       for(const issue of await this.provider.list(repository,commissionLabel)){
         validate(issue,repository);
-        const revision=sourceRevision(issue),existing=(await this.inbox.list()).find(v=>v.repository===repository&&v.issueNumber===issue.number);
-        if(existing){
-          if(existing.sourceRevision&&existing.sourceRevision!==revision&&["COMMISSIONED","COMPLETED"].includes(existing.commissionState))await this.inbox.patch(existing.id,{sourceRevision:revision});
-          continue;
-        }
-        const human=parseHumanGate(issue.body),candidate=await this.inbox.register({title:issue.title,product:repository.endsWith("/TOBIE")?"TOBIE WALL":"LCC",source:"GITHUB",sourceRef:issue.url,repository,issueNumber:issue.number,issueUrl:issue.url,commissionState:"READY",suggestedNextActionJa:`Issue #${issue.number} のAcceptance Criteriaを実装・検証・promotionする`,whyNotCommissioned:"GitHub Commission label verified",humanGate:human,humanActionJa:null,priority:50,sourceRevision:revision,githubIdentity:issue.author,commissionLabel});
+        const revision=sourceRevision(issue),existing=(await this.inbox.list()).filter(v=>v.repository===repository&&v.issueNumber===issue.number);
+        if(existing.some(v=>v.sourceRevision===revision))continue;
+        if(existing.some(v=>!['COMPLETED','REJECTED','DUPLICATE'].includes(v.commissionState)))continue;
+        const human=parseHumanGate(issue.body),input={title:issue.title,product:repository.endsWith("/TOBIE")?"TOBIE WALL":"LCC",source:"GITHUB" as const,sourceRef:issue.url,repository,issueNumber:issue.number,issueUrl:issue.url,commissionState:"READY" as const,suggestedNextActionJa:`Issue #${issue.number} のAcceptance Criteriaを実装・検証・promotionする`,whyNotCommissioned:"GitHub Commission label verified",humanGate:human,humanActionJa:null,priority:50,sourceRevision:revision,githubIdentity:issue.author,commissionLabel},candidate=existing.length?await this.inbox.registerGitHubRevision(input):await this.inbox.register(input);
         imported.push(await this.inbox.commission(candidate.id));
       }
     }
