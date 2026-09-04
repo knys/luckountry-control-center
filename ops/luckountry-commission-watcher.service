@@ -4,6 +4,7 @@ After=network-online.target luckountry-control-center.service
 [Service]
 Type=simple
 User=user
+SupplementaryGroups=luckountry
 WorkingDirectory=/home/user/.lcc-commission-watcher/workspace
 Environment=COMMISSION_INBOX_PATH=/var/lib/luckountry-control-center/commissions.json
 Environment=COMMISSION_WATCHER_STATUS_PATH=/var/lib/luckountry-control-center/watcher.json
