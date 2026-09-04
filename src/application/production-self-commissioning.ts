@@ -2,15 +2,16 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { DurableSelfCommissioningStore, SelfCommissioningOrchestrator, type CodexJob, type SelfCommissioningStep, type SupervisorJob, type SupervisorOperation } from "./self-commissioning.js";
 import { summarizeRun, type SelfCommissioningRun } from "../domain/self-commissioning-run.js";
+import { PersistentCodexDispatcher } from "./persistent-codex-dispatcher.js";
 
 export const productionProfile="LCC008_REAL_ACCEPTANCE" as const;
 export interface ProductionEvidenceSink { report(run:SelfCommissioningRun):Promise<void> }
 export interface ProductionControlView { profile:typeof productionProfile;runId:string;objective:string;status:SelfCommissioningRun["status"];currentStep:string|null;activeActor:SelfCommissioningRun["activeActor"];activeExecutionId:string|null;completedSteps:string[];retryUsage:{limit:number;consumed:number};blocker:string|null;humanGate:string|null;updatedAt:string;ballHolder:string;ongoing:boolean }
 
 export class ProductionSelfCommissioningControl {
-  private active=new Map<string,Promise<void>>();
   private cancelled=new Set<string>();
-  constructor(private store:DurableSelfCommissioningStore,private orchestrator:SelfCommissioningOrchestrator,private evidence:ProductionEvidenceSink,private readiness:()=>Promise<boolean|string>,private enabled:boolean,private id:()=>string=randomUUID){}
+  private dispatcher:PersistentCodexDispatcher;
+  constructor(private store:DurableSelfCommissioningStore,private orchestrator:SelfCommissioningOrchestrator,private evidence:ProductionEvidenceSink,private readiness:()=>Promise<boolean|string>,private enabled:boolean,private id:()=>string=randomUUID){this.dispatcher=new PersistentCodexDispatcher(store,orchestrator,evidence,{afterTick:async run=>this.cancelled.has(run.runId)?this.store.cancel(run.runId):run})}
   async readinessStatus(){const result=this.enabled?await this.readiness():"Self-Commissioning dispatch is disabled";return result===true?{status:"READY"as const,reason:null}:{status:"BLOCKED"as const,reason:String(result).slice(0,500)}}
   async create(value:unknown){
     if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).length!==1||(value as{profile?:unknown}).profile!==productionProfile)throw Error("only allowlisted production profile is accepted");
@@ -22,18 +23,13 @@ export class ProductionSelfCommissioningControl {
   async start(runId:string){
     const current=await this.store.get(runId);if(!current)throw Error("run not found");
     const readiness=this.enabled?await this.readiness():"Self-Commissioning dispatch is disabled";if(readiness!==true){await this.orchestrator.setKillSwitch(false);const stopped=await this.orchestrator.block(runId,typeof readiness==="string"?readiness:"Self-Commissioning readiness failed");await this.evidence.report(stopped);return view(stopped)}await this.orchestrator.setKillSwitch(true);
-    if(current.status!=="QUEUED")return view(current);this.drive(runId);
+    if(current.status!=="QUEUED")return view(current);this.dispatcher.start(runId);
     for(let i=0;i<100;i++){const next=await this.store.get(runId);if(next&&next.status!=="QUEUED")return view(next);await new Promise(r=>setImmediate(r))}
     throw Error("actor dispatch did not start");
   }
   async cancel(runId:string){this.cancelled.add(runId);const run=await this.store.cancel(runId);await this.evidence.report(run);return view(run)}
-  async resume(){if(!this.enabled||await this.readiness()!==true)return;for(const run of await this.store.list())if(run.status==="QUEUED")this.drive(run.runId)}
-  async drain(){await Promise.allSettled([...this.active.values()])}
-  private drive(id:string){
-    if(this.active.has(id))return;
-    const operation=(async()=>{for(;;){const before=await this.store.get(id);if(!before||before.status!=="QUEUED")return;let after=await this.orchestrator.tick(id);if(this.cancelled.has(id))after=await this.store.cancel(id);await this.evidence.report(after);if(after.status!=="QUEUED")return}})().finally(()=>this.active.delete(id));
-    this.active.set(id,operation);
-  }
+  async resume(){if(!this.enabled||await this.readiness()!==true)return;await this.dispatcher.resume()}
+  async drain(){await this.dispatcher.drain()}
 }
 function profileSteps(runId:string):SelfCommissioningStep[]{
   const key=(value:string)=>runId+":"+value;
