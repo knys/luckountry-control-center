@@ -201,6 +201,17 @@ export class DurableSelfCommissioningStore {
       return v.run;
     });
   }
+  async recoverInterrupted(id:string,input:{reason:string;staleBefore:string}) {
+    return this.update(n=>{
+      const v=n.runs.find(x=>x.run.runId===id);if(!v)throw Error("run absent");
+      if(v.run.status!=="RUNNING")return v.run;
+      if(v.run.updatedAt>input.staleBefore)throw Error("run is not stale");
+      if(v.run.recoveryBudget.consumed>=v.run.recoveryBudget.limit)throw Error("recovery budget exhausted");
+      const step=v.steps.find(s=>s.stepId===v.run.currentStep);if(!step)throw Error("checkpoint unavailable");
+      v.run={...v.run,status:"QUEUED",activeActor:null,activeExecutionId:null,queuedActor:actor(step),queuedStep:step.stepId,updatedAt:new Date().toISOString(),recoveryBudget:{...v.run.recoveryBudget,consumed:v.run.recoveryBudget.consumed+1},history:[...v.run.history,event("RECOVERING",input.reason,[`checkpoint=${step.stepId}`])]};
+      return v.run;
+    });
+  }
   async humanDecision(id:string,input:{actor:string;decision:"OK"|"NG";reason?:string|undefined}) {
     return this.update(n=>{
       const v=n.runs.find(x=>x.run.runId===id);if(!v)throw Error("run absent");

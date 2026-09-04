@@ -6,6 +6,7 @@ import { DurableSelfCommissioningStore,SelfCommissioningOrchestrator } from "./s
 import { PersistentCodexDispatcher } from "./persistent-codex-dispatcher.js";
 import { InterruptibleWait } from "./interruptible-wait.js";
 import { GhCommissionProvider,GitHubCommissionScanner } from "./github-commission.js";
+import { PortfolioSupervisor } from "./portfolio-supervisor.js";
 
 const data=process.env.LCC_DATA_DIRECTORY??"/var/lib/luckountry-control-center",runsPath=process.env.COMMISSION_RUNS_PATH??join(data,"commission-runs.json"),inbox=new CommissionInbox(process.env.COMMISSION_INBOX_PATH??join(data,"commissions.json"),new DurableCommissionRunRegistrar(runsPath)),statusPath=process.env.COMMISSION_WATCHER_STATUS_PATH??join(data,"watcher.json"),pausePath=process.env.COMMISSION_WATCHER_PAUSE_PATH??join(data,"watcher.paused"),interval=Math.max(10_000,Number(process.env.COMMISSION_WATCHER_INTERVAL_MS??60_000)),executor=new BoundedLocalCodexExecutor(process.env.LCC_WORKSPACE_ROOT??"/home/user/.lcc-commission-watcher/workspaces"),scanner=new GitHubCommissionScanner(inbox,new GhCommissionProvider()),sleeper=new InterruptibleWait();
 let stopping=false;const wait=(n:number)=>sleeper.wait(n);
@@ -13,7 +14,7 @@ async function save(x:Omit<WatcherStatus,"lastHeartbeat"|"heartbeatExpiresAt">){
 async function paused(){try{await readFile(pausePath);return true}catch{return false}}
 async function main(){let failures=0;while(!stopping){const now=new Date(),next=new Date(now.getTime()+interval).toISOString();try{
   await scanner.scan();
-  const items=await inbox.list(),store=await DurableSelfCommissioningStore.open(runsPath),allRuns=await store.list();
+  const items=await inbox.list(),registrar=new DurableCommissionRunRegistrar(runsPath);let store=await DurableSelfCommissioningStore.open(runsPath),supervisor=new PortfolioSupervisor(store,registrar),reconciled=await supervisor.reconcile(items);if(reconciled.repairedMissing.length){store=await DurableSelfCommissioningStore.open(runsPath);supervisor=new PortfolioSupervisor(store,registrar);await supervisor.reconcile(items)}const allRuns=await store.list();
   for(const item of items.filter(v=>v.commissionState==="COMMISSIONED"&&v.runId)){const run=allRuns.find(r=>r.runId===item.runId);if(run?.status==="SUCCEEDED")await inbox.patch(item.id,{commissionState:"COMPLETED",whyNotCommissioned:"完了済み（Persistent Dispatcher Run evidence retained）"})}
   const currentItems=await inbox.list(),waiting=allRuns.filter(v=>v.status==="WAITING_HUMAN").length,eligible=currentItems.filter(v=>v.commissionState==="COMMISSIONED"&&v.runId),queued=eligible.filter(v=>allRuns.some(r=>r.runId===v.runId&&r.status==="QUEUED")).filter(v=>v.dependsOn.every(id=>currentItems.some(dependency=>dependency.id===id&&dependency.commissionState==="COMPLETED")));
   if(await paused()||!(await store.enabled())){await save({state:"PAUSED",lastScan:now.toISOString(),nextScan:next,queuedCount:queued.length,activeCount:0,humanWaitingCount:waiting,currentWorkItem:null,currentActor:null,failure:null});failures=0;await wait(interval);continue}
