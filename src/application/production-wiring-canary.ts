@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { AutomaticEvidenceReporter, DurableEvidenceOutbox } from "./evidence-reporting.js";
 import { DurableSelfCommissioningStore, SelfCommissioningOrchestrator, type CommissioningExecutors } from "./self-commissioning.js";
 import { ProductionSelfCommissioningControl } from "./production-self-commissioning.js";
+import { composeProductionSelfCommissioning } from "../production-self-commissioning-composition.js";
 
 const directory=await mkdtemp(join(tmpdir(),"lcc-production-wiring-"));
 try {
@@ -14,6 +15,7 @@ try {
   await reporter.flush();
   while(!posts.includes(18)||!posts.includes(19))await new Promise(resolve=>setImmediate(resolve));
   await control.drain();
+  const composition=await composeProductionSelfCommissioning({executionState:async()=>({leases:[],records:[]}),verificationState:async()=>({leases:[],records:[]}),findWorkItem:async()=>null} as never,{LCC_DATA_DIRECTORY:join(directory,"production"),WORK_PILOT_STATE_PATH:join(directory,"production","pilot.json"),LCC_REPOSITORY_PATH:directory,WORK_AUTOMATION_MODE:"disabled",WORK_EXECUTION_ENABLED:"false",WORK_VERIFICATION_ENABLED:"false",SELF_COMMISSIONING_ENABLED:"true"});assert.match(String(await composition.readiness()),/GTX authenticated transport/);
   const restoredStore=await DurableSelfCommissioningStore.open(storePath);assert.equal((await restoredStore.list())[0]?.status,"SUCCEEDED");assert.deepEqual(calls.slice(0,6),["TX_LCC_STATUS","TX_LCC_MIGRATE_PILOT_STORE","TX_LCC_RECONCILE","GTX_WORKER_STATUS","GTX_WORKER_DESCRIPTOR","GTX_WORKSPACE_PREFLIGHT"]);assert.equal(calls.filter(value=>value==="TX_LCC_STATUS").length,1);
-  console.log(JSON.stringify({status:"PASS",profile:"LCC008_REAL_ACCEPTANCE",actorObserved:started.activeActor,terminal:"SUCCEEDED",fixedDispatch:true,evidenceDelivery:true,restartRestored:true,duplicateStartPrevented:true}));
+  console.log(JSON.stringify({status:"PASS",profile:"LCC008_REAL_ACCEPTANCE",actorObserved:started.activeActor,terminal:"SUCCEEDED",fixedDispatch:true,evidenceDelivery:true,restartRestored:true,duplicateStartPrevented:true,productionComposition:true,disabledFirst:true,readinessFailClosed:true}));
 } finally { await rm(directory,{recursive:true,force:true}); }

@@ -2,11 +2,13 @@ import type { ExecutionRequest, ExecutionResult, Executor, WorkerDescriptor, Wor
 import { signRequest, type HmacCredentials } from "./hmac-auth.js";
 import type{VerificationExecutor}from"../application/verification.js";
 import type{VerificationRequest,VerificationResult}from"../domain/verification.js";
+import type{GtxMaintenanceRequest,GtxMaintenanceResult}from"../worker/maintenance.js";
 
 export interface RemoteWorkerConfig { workerId:string; baseUrl:string; credentials:HmacCredentials }
 export class RemoteTransportError extends Error {}
 async function request(config:RemoteWorkerConfig,method:string,path:string,body="",fetcher:typeof fetch=fetch):Promise<Response>{const headers=signRequest(config.credentials,method,path,body);const init:RequestInit={method,headers:{...headers,...(body?{"content-type":"application/json"}:{})},signal:AbortSignal.timeout(30_000)};if(body)init.body=body;return fetcher(new URL(path,config.baseUrl),init);}
 export class RemoteWorkerRegistry implements WorkerRegistry { constructor(private readonly configs:readonly RemoteWorkerConfig[],private readonly fetcher:typeof fetch=fetch){}async get(workerId:string):Promise<WorkerDescriptor|null>{const config=this.configs.find(item=>item.workerId===workerId);if(!config)return null;try{const response=await request(config,"GET","/v1/descriptor","",this.fetcher);if(!response.ok)return null;const value=await response.json() as WorkerDescriptor;if(value.workerId!==workerId||!Array.isArray(value.capabilities)||!Array.isArray(value.workspaceIds)||!Array.isArray(value.executorKinds))return null;return structuredClone(value);}catch{return null;}} }
+export class RemoteWorkerMaintenanceClient{constructor(private config:RemoteWorkerConfig,private fetcher:typeof fetch=fetch){}async execute(value:GtxMaintenanceRequest):Promise<GtxMaintenanceResult>{const body=JSON.stringify(value),response=await request(this.config,"POST","/v1/maintenance",body,this.fetcher);if(!response.ok)throw new RemoteTransportError(`worker maintenance rejected (${response.status})`);return response.json() as Promise<GtxMaintenanceResult>}}
 export interface RemoteExecutionStatus { status:string;startedAt:string|null;finishedAt:string|null;summary:string;evidence:string[];finalAgentMessage?:string;baseHead?:string;candidateBranch?:string;candidateHead?:string }
 export const CONTROLLER_EXECUTION_TIMEOUT_MS=31*60_000;
 export interface RemotePollingPolicy{pollIntervalMs:number;controllerTimeoutMs:number;terminalGraceMs:number;now:()=>number;sleep:(milliseconds:number)=>Promise<void>}

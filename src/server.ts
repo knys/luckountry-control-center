@@ -7,6 +7,7 @@ import { GhCliMetadataProvider, parseProductsManifest, ProductService } from "./
 import { createRequestHandler } from "./http-app.js";
 import { composeExecutionRuntime, composeIssueRuntime,composePilotRuntime,composeVerificationRuntime } from "./composition.js";
 import { discoverRepositories } from "./composition.js";
+import { composeProductionSelfCommissioning } from "./production-self-commissioning-composition.js";
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? "3000");
@@ -19,7 +20,8 @@ const repositories = discoverRepositories(manifest);
 const durable=issueRuntime.repository as Required<typeof issueRuntime.repository>,pilotRuntime=issueRuntime.repository.acquireExecution&&issueRuntime.repository.acquireVerification?await composePilotRuntime(durable):null;
 const executionRuntime = pilotRuntime ? await composeExecutionRuntime(durable, repositories,process.env,pilotRuntime) : null;
 const verificationRuntime=pilotRuntime?await composeVerificationRuntime(durable,repositories,process.env,pilotRuntime):null;
-const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined,issueRuntime.repository.verificationState?()=>issueRuntime.repository.verificationState!():undefined,pilotRuntime?async()=>{const scope=pilotRuntime.control.scope,items=scope?await issueRuntime.repository.list(scope.repository):[];return{control:pilotRuntime.control,cycles:await pilotRuntime.cycles.pilotCycles(),matchedWorkItemIds:scope?items.filter(item=>item.source.externalId===scope.externalId).map(item=>item.id):[],workerReady:pilotRuntime.targetReady,recovery:await pilotRuntime.readiness.recoveryStatus()};}:undefined));
+const selfCommissioning=issueRuntime.repository.acquireExecution&&issueRuntime.repository.acquireVerification?await composeProductionSelfCommissioning(durable):undefined;
+const server = createServer(createRequestHandler(productService, deviceProviders, undefined, () => issueRuntime.runtime.status(), async () => (await Promise.all(repositories.map((repository) => issueRuntime.repository.list(repository)))).flat(), issueRuntime.repository.executionState ? () => issueRuntime.repository.executionState!() : undefined,issueRuntime.repository.verificationState?()=>issueRuntime.repository.verificationState!():undefined,pilotRuntime?async()=>{const scope=pilotRuntime.control.scope,items=scope?await issueRuntime.repository.list(scope.repository):[];return{control:pilotRuntime.control,cycles:await pilotRuntime.cycles.pilotCycles(),matchedWorkItemIds:scope?items.filter(item=>item.source.externalId===scope.externalId).map(item=>item.id):[],workerReady:pilotRuntime.targetReady,recovery:await pilotRuntime.readiness.recoveryStatus()};}:undefined,selfCommissioning));
 
 server.listen(port, host, () => console.log(`Luckountry Control Center listening on http://${host}:${port}`));
 issueRuntime.runtime.start();

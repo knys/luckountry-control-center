@@ -10,7 +10,7 @@ export interface ProductionControlView { profile:typeof productionProfile;runId:
 export class ProductionSelfCommissioningControl {
   private active=new Map<string,Promise<void>>();
   private cancelled=new Set<string>();
-  constructor(private store:DurableSelfCommissioningStore,private orchestrator:SelfCommissioningOrchestrator,private evidence:ProductionEvidenceSink,private readiness:()=>Promise<boolean>,private enabled:boolean,private id:()=>string=randomUUID){}
+  constructor(private store:DurableSelfCommissioningStore,private orchestrator:SelfCommissioningOrchestrator,private evidence:ProductionEvidenceSink,private readiness:()=>Promise<boolean|string>,private enabled:boolean,private id:()=>string=randomUUID){}
   async create(value:unknown){
     if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).length!==1||(value as{profile?:unknown}).profile!==productionProfile)throw Error("only allowlisted production profile is accepted");
     const runId="lcc008-"+this.id().replace(/[^A-Za-z0-9._-]/g,"").slice(0,64);
@@ -20,13 +20,13 @@ export class ProductionSelfCommissioningControl {
   async list(){return Promise.all((await this.store.list()).map(view))}
   async start(runId:string){
     const current=await this.store.get(runId);if(!current)throw Error("run not found");
-    if(!this.enabled||!await this.readiness()){await this.orchestrator.setKillSwitch(false);const stopped=await this.orchestrator.tick(runId);await this.evidence.report(stopped);return view(stopped)}
+    const readiness=this.enabled?await this.readiness():"Self-Commissioning dispatch is disabled";if(readiness!==true){await this.orchestrator.setKillSwitch(false);const stopped=await this.orchestrator.block(runId,typeof readiness==="string"?readiness:"Self-Commissioning readiness failed");await this.evidence.report(stopped);return view(stopped)}await this.orchestrator.setKillSwitch(true);
     if(current.status!=="QUEUED")return view(current);this.drive(runId);
     for(let i=0;i<100;i++){const next=await this.store.get(runId);if(next&&next.status!=="QUEUED")return view(next);await new Promise(r=>setImmediate(r))}
     throw Error("actor dispatch did not start");
   }
   async cancel(runId:string){this.cancelled.add(runId);const run=await this.store.cancel(runId);await this.evidence.report(run);return view(run)}
-  async resume(){if(!this.enabled||!await this.readiness())return;for(const run of await this.store.list())if(run.status==="QUEUED")this.drive(run.runId)}
+  async resume(){if(!this.enabled||await this.readiness()!==true)return;for(const run of await this.store.list())if(run.status==="QUEUED")this.drive(run.runId)}
   async drain(){await Promise.allSettled([...this.active.values()])}
   private drive(id:string){
     if(this.active.has(id))return;
