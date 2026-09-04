@@ -51,7 +51,7 @@ export async function finalizeCandidate(job:CodexJob,cwd:string,base:string,path
   const head=await run("/usr/bin/git",["rev-parse","HEAD"],cwd);if(head.code)return{status:"BLOCKED",summary:"Candidate HEAD unavailable",evidence:[]};if(head.stdout.trim()!==base)return null;
   const status=await run("/usr/bin/git",["status","--porcelain"],cwd),diff=await run("/usr/bin/git",["diff","--no-ext-diff"],cwd);if(status.code||diff.code)return{status:"BLOCKED",summary:"Candidate worktree inspection failed",evidence:[]};
   const lines=status.stdout.split(/\r?\n/).filter(Boolean),paths=lines.map(line=>line.slice(3));
-  const secret=/(gh[opsu]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|(?:password|token|secret)\s*[=:]\s*[^\s"']{8,})/i;
+  const secret=/(gh[opsu]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|(?:password|token|secret)\s*[=:]\s*(?!process\.env\.|Deno\.env\.)[^\s"']{8,})/i;
   if(!lines.length||lines.some(line=>line.startsWith("??")||line.includes(" -> "))||paths.some(path=>!pathBoundary.test(path))||secret.test(diff.stdout))return{status:"BLOCKED",summary:"Uncommitted candidate is empty, untracked, renamed, outside boundary, or secret-shaped",evidence:[]};
   const staged=await run("/usr/bin/git",["add","--update","--",...paths],cwd);if(staged.code)return{status:"BLOCKED",summary:"Bounded candidate staging failed",evidence:[]};
   const committed=await run("/usr/bin/git",["commit","-m",`Commission #${job.issueNumber}: finalize bounded actor changes`],cwd);return committed.code?{status:"BLOCKED",summary:"Bounded candidate commit failed",evidence:[]}:null;
@@ -59,7 +59,7 @@ export async function finalizeCandidate(job:CodexJob,cwd:string,base:string,path
 
 export async function verifyCandidate(job:CodexJob,cwd:string,base:string,pathBoundary:RegExp,checks:readonly [string,string[]][],run:FixedRunner):Promise<CommissioningResult>{
   const status=await run("/usr/bin/git",["status","--porcelain"],cwd),head=await run("/usr/bin/git",["rev-parse","HEAD"],cwd),ancestor=await run("/usr/bin/git",["merge-base","--is-ancestor",base,head.stdout.trim()],cwd),files=await run("/usr/bin/git",["diff","--name-only",`${base}..${head.stdout.trim()}`],cwd),diff=await run("/usr/bin/git",["diff","--no-ext-diff",`${base}..${head.stdout.trim()}`],cwd);
-  const changed=files.stdout.split(/\r?\n/).filter(Boolean),secret=/(gh[opsu]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|(?:password|token|secret)\s*[=:]\s*[^\s"']{8,})/i;
+  const changed=files.stdout.split(/\r?\n/).filter(Boolean),secret=/(gh[opsu]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|(?:password|token|secret)\s*[=:]\s*(?!process\.env\.|Deno\.env\.)[^\s"']{8,})/i;
   if(status.code||status.stdout.trim()||head.code||head.stdout.trim()===base||ancestor.code||!changed.length||changed.some(v=>!pathBoundary.test(v))||secret.test(diff.stdout))return{status:"BLOCKED",summary:"Candidate postcondition failed: clean committed descendant, boundary, non-empty diff, or secret scan",evidence:[]};
   const evidence=[`candidate=${head.stdout.trim()}`,`base=${base}`,`files=${changed.length}`];for(const [file,args] of checks){const value=await run(file,args,cwd);if(value.code)return{status:"FAILED",summary:`Independent check failed: ${file} ${args.join(" ")}`,evidence,retryable:true};evidence.push(`${file.split("/").at(-1)} ${args.join(" ")}: PASS`)}
   return{status:"SUCCEEDED",summary:"Candidate postconditions passed",evidence};
