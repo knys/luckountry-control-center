@@ -18,6 +18,7 @@ const run = (changes: Partial<SelfCommissioningRun> = {}): SelfCommissioningRun 
   blocker: "No autonomous task is assigned",
   humanGate: null,
   retryBudget: { limit: 1, consumed: 0 },
+  recoveryBudget: { limit: 3, consumed: 0 },
   history: [],
   ...changes
 });

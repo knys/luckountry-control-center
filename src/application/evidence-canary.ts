@@ -7,7 +7,7 @@ import type { SelfCommissioningRun } from "../domain/self-commissioning-run.js";
 
 const directory=await mkdtemp(join(tmpdir(),"lcc-evidence-canary-"));
 try {
-  const posts:number[]=[],run:SelfCommissioningRun={runId:"synthetic-evidence",objective:"Prove automatic GitHub evidence flow",status:"BLOCKED",currentStep:"synthetic",activeActor:null,activeExecutionId:null,queuedActor:null,queuedStep:null,startedAt:"a",updatedAt:"b",completedSteps:["tx","gtx"],failedStep:"synthetic",blocker:"synthetic policy stop",humanGate:null,retryBudget:{limit:1,consumed:1},history:[]};
+  const posts:number[]=[],run:SelfCommissioningRun={runId:"synthetic-evidence",objective:"Prove automatic GitHub evidence flow",status:"BLOCKED",currentStep:"synthetic",activeActor:null,activeExecutionId:null,queuedActor:null,queuedStep:null,startedAt:"a",updatedAt:"b",completedSteps:["tx","gtx"],failedStep:"synthetic",blocker:"synthetic policy stop",humanGate:null,retryBudget:{limit:1,consumed:1},recoveryBudget:{limit:3,consumed:0},history:[]};
   const path=join(directory,"outbox.json"),transport={postComment:async(_repository:string,number:number,_body:string)=>{posts.push(number);return{commentId:String(number)}}};
   const reporter=new AutomaticEvidenceReporter(await DurableEvidenceOutbox.open(path),transport,{repository:"knys/luckountry-control-center",issueNumber:18,pullNumber:19},2);
   const source=[{kind:"CONTROLLER"as const,status:"BLOCKED",summary:"synthetic"},{kind:"CODEX"as const,status:"FAILED",summary:"bounded failure",finalAgentMessage:"synthetic final"}];
