@@ -21,6 +21,12 @@ observable behavior and preserve all prior LCC-008 durable state and history.
 
 ## Acceptance matrix
 
+Attempt3 timeout recovery is fail-closed: the original `TIMED_OUT` record remains
+immutable, a fixed Worker verification must pass all allowlisted checks at the
+candidate HEAD, and only then may an atomic `INDEPENDENTLY_VERIFIED` recovery
+record advance the WorkItem to normal verification. The source execution,
+candidate branch, base HEAD, and full prior Pilot history remain durable.
+
 | AC | First behavioral test | Required observable outcome | Evidence |
 |---|---|---|---|
 | AC-01 | `L009-01 durable run resumes from checkpoint after reopen` | Run/session, completed steps, active step, retry budget, and history survive restart; completed idempotent steps are not repeated. | Store reopen test and synthetic restart canary. |
