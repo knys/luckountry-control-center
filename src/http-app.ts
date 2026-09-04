@@ -26,7 +26,7 @@ export function createRequestHandler(products: ProductService, devices: DevicePr
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const path = new URL(request.url ?? "/", "http://localhost").pathname;
-      if(path==="/api/self-commissioning"&&request.method==="GET"&&selfCommissioning)return json(response,200,{runs:await selfCommissioning.control.list()});
+      if(path==="/api/self-commissioning"&&request.method==="GET"&&selfCommissioning)return json(response,200,{readiness:await selfCommissioning.control.readinessStatus(),runs:await selfCommissioning.control.list()});
       const createRun=path==="/api/self-commissioning/runs"&&request.method==="POST",runAction=path.match(/^\/api\/self-commissioning\/runs\/([A-Za-z0-9._-]{1,100})\/(start|cancel)$/);
       if(selfCommissioning&&(createRun||runAction&&request.method==="POST")){if(!validControlToken(request,selfCommissioning.token))return json(response,401,{error:"unauthorized"});if(createRun)return json(response,201,await selfCommissioning.control.create(await requestJson(request)));const runId=runAction![1]!,action=runAction![2]!;return json(response,action==="start"?202:200,action==="start"?await selfCommissioning.control.start(runId):await selfCommissioning.control.cancel(runId));}
       if (request.method !== "GET") return json(response, 405, { error: "method_not_allowed" });

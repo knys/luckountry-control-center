@@ -11,6 +11,7 @@ export class ProductionSelfCommissioningControl {
   private active=new Map<string,Promise<void>>();
   private cancelled=new Set<string>();
   constructor(private store:DurableSelfCommissioningStore,private orchestrator:SelfCommissioningOrchestrator,private evidence:ProductionEvidenceSink,private readiness:()=>Promise<boolean|string>,private enabled:boolean,private id:()=>string=randomUUID){}
+  async readinessStatus(){const result=this.enabled?await this.readiness():"Self-Commissioning dispatch is disabled";return result===true?{status:"READY"as const,reason:null}:{status:"BLOCKED"as const,reason:String(result).slice(0,500)}}
   async create(value:unknown){
     if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).length!==1||(value as{profile?:unknown}).profile!==productionProfile)throw Error("only allowlisted production profile is accepted");
     const runId="lcc008-"+this.id().replace(/[^A-Za-z0-9._-]/g,"").slice(0,64);
