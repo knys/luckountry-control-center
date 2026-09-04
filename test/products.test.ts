@@ -72,6 +72,16 @@ test("BLOCKED exposes the exact latest execution evidence",async()=>{
   assert.equal(product.failureSummary,"TIMED_OUT: worker transport timed out");
 });
 
+test("product detail state keeps run, execution, actors, PRs, and revision SHAs distinct",async()=>{
+  const work={id:"github:knys/repo:30",source:{repository:"knys/repo",externalId:"30"},title:"Popup revision",sourceUrl:"https://github.com/knys/repo/issues/30",workState:"VERIFYING",ballHolder:"LCC",nextAction:{summary:"Verify"},blocker:null,evidence:["related https://github.com/knys/repo/pull/39","deployedSha=ccccccc"]};
+  const execution={executionId:"exec-30",workItemId:work.id,resultStatus:"SUCCEEDED",startedAt:"x",finishedAt:"y",summary:"done",evidence:[],baseHead:"aaaaaaa",candidateHead:"bbbbbbb"};
+  const product=(await new ProductService(manifest,{fetch:async()=>new Map()},60_000,()=>100_000,async()=>({workItems:[work],executions:[execution],runs:[{runId:"run-30",workItemId:work.id}]})).getProducts()).products[0]!;
+  assert.equal(product.activeActor,null);assert.equal(product.queuedActor,"LCC");
+  assert.equal(product.currentRun,"run-30");assert.equal(product.executionId,"exec-30");
+  assert.deepEqual(product.relatedPullRequests,[{number:39,url:"https://github.com/knys/repo/pull/39"}]);
+  assert.equal(product.baseSha,"aaaaaaa");assert.equal(product.candidateSha,"bbbbbbb");assert.equal(product.deployedSha,"ccccccc");
+});
+
 test("product detail UI is structured, accessible, closable, and polling-safe",async()=>{
   const [markup,script,styles]=await Promise.all([readFile("src/public/index.html","utf8"),readFile("src/public/app.ts","utf8"),readFile("src/public/styles.css","utf8")]);
   assert.match(markup,/role="dialog" aria-modal="true" aria-labelledby="product-detail-title"/);
@@ -81,6 +91,7 @@ test("product detail UI is structured, accessible, closable, and polling-safe",a
   assert.match(script,/data-modal-close/);
   assert.match(script,/renderOpenProduct\(\);const states=/, "poll refresh rerenders an open detail from the same Product SSOT");
   for(const heading of ["NEXT ACTION","HUMAN ACTION","HUMAN GATE / WHY HUMAN?","EXACT BLOCKER","RELATED WORK"])assert.match(script,new RegExp(heading.replace(/[?]/g,"\\?")));
+  for(const heading of ["ACTIVE ACTOR","QUEUED ACTOR","CURRENT RUN","EXECUTION ID","BASE SHA","CANDIDATE SHA","DEPLOYED SHA"])assert.match(script,new RegExp(heading));
   assert.match(styles,/\.detail-body \{ overflow-y: auto/);
   assert.match(styles,/white-space: pre-wrap; overflow-wrap: anywhere/);
 });
