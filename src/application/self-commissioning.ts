@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { TxMaintenanceRequest } from "./tx-maintenance.js";
 import type { GtxMaintenanceRequest } from "../worker/maintenance.js";
@@ -114,7 +114,8 @@ export class DurableSelfCommissioningStore {
       assertRunInvariant(v.run);
     }
     if (changed) await persist(path, value);
-    else await chmod(path, 0o660);
+    else if (((await stat(path)).mode & 0o777) !== 0o660)
+      await chmod(path, 0o660);
     return new DurableSelfCommissioningStore(path, value);
   }
   async get(id: string) {
