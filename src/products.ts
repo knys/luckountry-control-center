@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { redact } from "./application/verification.js";
+import type { SyncMetadata } from "./domain/work-item.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -12,7 +13,8 @@ export type ProductBall = typeof productBalls[number];
 export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string; workItemMatch?:string[]; primaryIssue?:number; humanActionJa?:string; humanGate?:string; blocker?:string }
 export interface ProductsManifest { version: 1; products: ProductManifestItem[] }
 export interface GitHubMetadata { repository: string; repositoryUrl: string; defaultBranch: string | null; headSha: string | null; openIssues: number; openPullRequests: number; updatedAt: string }
-export interface ProductStatus extends Omit<ProductManifestItem,"humanActionJa"|"humanGate"|"blocker"> { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; issueNumber:number|null;issueTitle:string|null;issueUrl:string|null;relatedIssues:{number:number;url:string;title:string;state:string}[];relatedPullRequests:{number:number;url:string}[];nextActionJa:string;humanActionJa:string|null;activeActor:string|null;queuedActor:string|null;currentRun:string|null;executionId:string|null;baseSha:string|null;candidateSha:string|null;deployedSha:string|null;blocker:string|null;humanGate:string|null;failureSummary:string|null;latestVerificationSummary:string|null;latestGitHubEvidence:string|null }
+export interface HumanSourceIdentity {repository:string;issueNumber:number;revision:string}
+export interface ProductStatus extends Omit<ProductManifestItem,"humanActionJa"|"humanGate"|"blocker"> { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; syncWarning:string|null;issueNumber:number|null;issueTitle:string|null;issueUrl:string|null;relatedIssues:{number:number;url:string;title:string;state:string}[];relatedPullRequests:{number:number;url:string}[];nextActionJa:string;humanActionJa:string|null;humanSource:HumanSourceIdentity|null;activeActor:string|null;queuedActor:string|null;currentRun:string|null;executionId:string|null;baseSha:string|null;candidateSha:string|null;deployedSha:string|null;blocker:string|null;humanGate:string|null;failureSummary:string|null;latestVerificationSummary:string|null;latestGitHubEvidence:string|null }
 export interface ProductsResponse { timestamp: string; cacheUpdatedAt: string | null; stale: boolean; warning: string | null; products: ProductStatus[] }
 export interface GitHubMetadataProvider { fetch(repositories: readonly string[]): Promise<Map<string, GitHubMetadata>> }
 
@@ -75,10 +77,10 @@ export class GhCliMetadataProvider implements GitHubMetadataProvider {
   }
 }
 
-export interface PortfolioWork {id:string;source:{repository:string;externalId:string};title:string;sourceUrl:string;workState:string;ballHolder:string;nextAction:{summary:string};blocker:string|null;evidence:string[]}
+export interface PortfolioWork {id:string;source:{repository:string;externalId:string};title:string;sourceUrl:string;sourceState?:string;sourceUpdatedAt?:string;workState:string;ballHolder:string;nextAction:{summary:string};blocker:string|null;evidence:string[]}
 export interface PortfolioExecution {executionId:string;workItemId:string;resultStatus:string;startedAt:string;finishedAt:string|null;summary:string;evidence?:string[];baseHead?:string;candidateHead?:string}
 export interface PortfolioRun {runId:string;workItemId:string}
-export interface PortfolioState {workItems:PortfolioWork[];executions:PortfolioExecution[];runs?:PortfolioRun[]}
+export interface PortfolioState {workItems:PortfolioWork[];executions:PortfolioExecution[];runs?:PortfolioRun[];syncMetadata?:Record<string,SyncMetadata>}
 export class ProductService {
   private metadata = new Map<string, GitHubMetadata>();
   private cacheUpdatedAt: string | null = null;
@@ -112,14 +114,21 @@ export class ProductService {
       const active=[...(portfolio?.executions??[])].reverse().find(value=>value.resultStatus==="ACTIVE"&&candidates.some(work=>work.id===value.workItemId));
       const rank=(value:PortfolioWork)=>["RUNNING","VERIFYING","RETRYING","READY","WAITING_WORKER","WAITING_HUMAN","BLOCKED","FAILED","DEFINED","DONE"].indexOf(value.workState);
       const work=(active?candidates.find(value=>value.id===active.workItemId):undefined)??candidates.find(value=>Number(value.source.externalId)===product.primaryIssue)??[...candidates].sort((a,b)=>rank(a)-rank(b))[0];
-      const explicitHuman=product.ball==="HUMAN"&&product.status==="ACCEPTANCE"&&!!product.humanActionJa&&!!product.humanGate;
-      const status:ProductState=active&&work?"RUNNING":explicitHuman?"ACCEPTANCE":work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":work?"QUEUED":product.status==="RUNNING"?"READY":product.status;
-      const ball:ProductBall=active&&work?"CODEX":explicitHuman||work?.workState==="WAITING_HUMAN"?"HUMAN":work?((work.ballHolder==="CODEX"?"CODEX":"LCC") as ProductBall):product.ball;
+      const sync=product.repository?portfolio?.syncMetadata?.[product.repository]:undefined;
+      const syncFailed=sync?.status==="FAILED";
+      const configuredHuman=product.ball==="HUMAN"&&product.status==="ACCEPTANCE"&&!!product.humanActionJa&&!!product.humanGate;
+      const primaryOpen=product.primaryIssue!==undefined&&candidates.some(value=>Number(value.source.externalId)===product.primaryIssue&&value.sourceState!=="closed");
+      const explicitHuman=!syncFailed&&primaryOpen&&configuredHuman;
+      const status:ProductState=active&&work?"RUNNING":explicitHuman?"ACCEPTANCE":!syncFailed&&work?.workState==="WAITING_HUMAN"?"ACCEPTANCE":work?.workState==="BLOCKED"||work?.workState==="FAILED"?"BLOCKED":work?"QUEUED":configuredHuman?"READY":product.status==="RUNNING"?"READY":product.status;
+      const ball:ProductBall=active&&work?"CODEX":explicitHuman||(!syncFailed&&work?.workState==="WAITING_HUMAN")?"HUMAN":work?((work.ballHolder==="CODEX"?"CODEX":"LCC") as ProductBall):configuredHuman?"LCC":product.ball;
       const issueNumber=work&&/^\d+$/.test(work.source.externalId)?Number(work.source.externalId):product.primaryIssue??null;
       const issueUrl=work?.sourceUrl??(issueNumber&&product.repository?`https://github.com/${product.repository}/issues/${issueNumber}`:null);
       const nextActionJa=deriveNextActionJa(product,work,status,issueNumber,ball);
-      const humanActionJa=ball==="HUMAN"?(product.humanActionJa??(work?`Issue #${issueNumber}「${work.title}」について、指定された実機または画面で完了条件を確認し、観察結果とPASS/FAILを記録する`:null)):null;
-      const humanGate=ball==="HUMAN"?(product.humanGate??(work?.workState==="WAITING_HUMAN"?`Issue #${issueNumber}は自動検証後のHuman Acceptanceを必要としている`:null)):null;
+      const validHumanWork=!syncFailed&&work?.sourceState!=="closed"&&(explicitHuman||work?.workState==="WAITING_HUMAN")?work:undefined;
+      const humanActionJa=validHumanWork?(explicitHuman?product.humanActionJa!:`Issue #${issueNumber}「${work!.title}」について、指定された実機または画面で完了条件を確認し、観察結果とPASS/FAILを記録する`):null;
+      const humanGate=validHumanWork?(explicitHuman?product.humanGate!:`Issue #${issueNumber}は自動検証後のHuman Acceptanceを必要としている`):null;
+      const humanSource=validHumanWork&&product.repository&&issueNumber?{repository:product.repository,issueNumber,revision:validHumanWork.sourceUpdatedAt??validHumanWork.id}:null;
+      const syncWarning=syncFailed?`GitHub issue sync failed (${sync.failureType??"UNKNOWN"}); Human Action is hidden until a fresh successful poll`:null;
       const latestExecution=work?[...(portfolio?.executions??[])].reverse().find(value=>value.workItemId===work.id):undefined;
       const currentRun=work?[...(portfolio?.runs??[])].reverse().find(value=>value.workItemId===work.id)?.runId??null:null;
       const rawBlocker=status==="BLOCKED"?(work?.blocker??(latestExecution?`Issue #${issueNumber} / Run ${latestExecution.executionId} ${latestExecution.resultStatus}: ${latestExecution.summary}`:undefined)??product.blocker??(work?`Issue #${issueNumber} が ${work.workState}: ${work.nextAction.summary}`:null)):null;
@@ -133,7 +142,7 @@ export class ProductService {
       const candidateSha=safeEvidenceSha(latestExecution?.candidateHead??findEvidenceValue(evidence,"candidate(?:Head|Sha)"));
       const explicitDeployed=safeEvidenceSha(findEvidenceValue(evidence,"deployed(?:Head|Sha)"));
       const deployedSha=explicitDeployed??(candidateSha&&github?.headSha===candidateSha?candidateSha:null);
-      return { ...product,status,ball,nextAction:nextActionJa,nextActionJa,humanActionJa,issueNumber,issueTitle:work?.title??null,issueUrl,relatedIssues,relatedPullRequests,repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:active&&work?"CODEX":null,queuedActor:status==="QUEUED"?(ball==="CODEX"?"CODEX":"LCC"):null,currentRun,executionId:latestExecution?.executionId??null,baseSha,candidateSha,deployedSha,blocker,humanGate,failureSummary,latestVerificationSummary,latestGitHubEvidence:issueUrl??github?.repositoryUrl??null };
+      return { ...product,status,ball,nextAction:nextActionJa,nextActionJa,humanActionJa,humanSource,issueNumber,issueTitle:work?.title??null,issueUrl,relatedIssues,relatedPullRequests,repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || syncFailed || (!!product.repository && !github),syncWarning,activeActor:active&&work?"CODEX":null,queuedActor:status==="QUEUED"?(ball==="CODEX"?"CODEX":"LCC"):null,currentRun,executionId:latestExecution?.executionId??null,baseSha,candidateSha,deployedSha,blocker,humanGate,failureSummary,latestVerificationSummary,latestGitHubEvidence:issueUrl??github?.repositoryUrl??null };
     }) };
   }
 }
