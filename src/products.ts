@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { redact } from "./application/verification.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -11,7 +12,7 @@ export type ProductBall = typeof productBalls[number];
 export interface ProductManifestItem { id: string; name: string; repository: string | null; summary: string; status: ProductState; ball: ProductBall; nextAction: string; workItemMatch?:string[]; primaryIssue?:number; humanActionJa?:string; humanGate?:string; blocker?:string }
 export interface ProductsManifest { version: 1; products: ProductManifestItem[] }
 export interface GitHubMetadata { repository: string; repositoryUrl: string; defaultBranch: string | null; headSha: string | null; openIssues: number; openPullRequests: number; updatedAt: string }
-export interface ProductStatus extends Omit<ProductManifestItem,"humanActionJa"|"humanGate"|"blocker"> { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; issueNumber:number|null;issueUrl:string|null;relatedIssues:{number:number;url:string;title:string;state:string}[];nextActionJa:string;humanActionJa:string|null;activeActor:string|null;queuedActor:string|null;currentRun:string|null;blocker:string|null;humanGate:string|null;latestGitHubEvidence:string|null }
+export interface ProductStatus extends Omit<ProductManifestItem,"humanActionJa"|"humanGate"|"blocker"> { repositoryUrl: string | null; defaultBranch: string | null; headSha: string | null; openIssues: number | null; openPullRequests: number | null; updatedAt: string | null; source: "manifest" | "manifest+github"; stale: boolean; issueNumber:number|null;issueTitle:string|null;issueUrl:string|null;relatedIssues:{number:number;url:string;title:string;state:string}[];nextActionJa:string;humanActionJa:string|null;activeActor:string|null;queuedActor:string|null;currentRun:string|null;blocker:string|null;humanGate:string|null;failureSummary:string|null;latestVerificationSummary:string|null;latestGitHubEvidence:string|null }
 export interface ProductsResponse { timestamp: string; cacheUpdatedAt: string | null; stale: boolean; warning: string | null; products: ProductStatus[] }
 export interface GitHubMetadataProvider { fetch(repositories: readonly string[]): Promise<Map<string, GitHubMetadata>> }
 
@@ -119,9 +120,12 @@ export class ProductService {
       const humanActionJa=ball==="HUMAN"?(product.humanActionJa??(work?`Issue #${issueNumber}「${work.title}」について、指定された実機または画面で完了条件を確認し、観察結果とPASS/FAILを記録する`:null)):null;
       const humanGate=ball==="HUMAN"?(product.humanGate??(work?.workState==="WAITING_HUMAN"?`Issue #${issueNumber}は自動検証後のHuman Acceptanceを必要としている`:null)):null;
       const latestExecution=work?[...(portfolio?.executions??[])].reverse().find(value=>value.workItemId===work.id):undefined;
-      const blocker=status==="BLOCKED"?(work?.blocker??(latestExecution?`Issue #${issueNumber} / Run ${latestExecution.executionId} ${latestExecution.resultStatus}: ${latestExecution.summary}`:undefined)??product.blocker??(work?`Issue #${issueNumber} が ${work.workState}: ${work.nextAction.summary}`:null)):null;
+      const rawBlocker=status==="BLOCKED"?(work?.blocker??(latestExecution?`Issue #${issueNumber} / Run ${latestExecution.executionId} ${latestExecution.resultStatus}: ${latestExecution.summary}`:undefined)??product.blocker??(work?`Issue #${issueNumber} が ${work.workState}: ${work.nextAction.summary}`:null)):null;
+      const blocker=rawBlocker?redact(rawBlocker,1000):null;
       const relatedIssues=candidates.filter(value=>value!==work).slice(0,20).map(value=>({number:Number(value.source.externalId),url:value.sourceUrl,title:value.title,state:value.workState})).filter(value=>Number.isSafeInteger(value.number));
-      return { ...product,status,ball,nextAction:nextActionJa,nextActionJa,humanActionJa,issueNumber,issueUrl,relatedIssues,repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:active&&work?"CODEX":null,queuedActor:status==="QUEUED"?(ball==="CODEX"?"CODEX":"LCC"):null,currentRun:active&&work?active.executionId:null,blocker,humanGate,latestGitHubEvidence:issueUrl??github?.repositoryUrl??null };
+      const failureSummary=latestExecution&&latestExecution.resultStatus!=="ACTIVE"?redact(`${latestExecution.resultStatus}: ${latestExecution.summary}`,500):null;
+      const latestVerificationSummary=work?.evidence.length?work.evidence.slice(-3).map(value=>redact(value,500)).join("\n"):null;
+      return { ...product,status,ball,nextAction:nextActionJa,nextActionJa,humanActionJa,issueNumber,issueTitle:work?.title??null,issueUrl,relatedIssues,repositoryUrl: github?.repositoryUrl ?? null, defaultBranch: github?.defaultBranch ?? null, headSha: github?.headSha ?? null, openIssues: github?.openIssues ?? null, openPullRequests: github?.openPullRequests ?? null, updatedAt: github?.updatedAt ?? null, source: github ? "manifest+github" : "manifest", stale: stale || (!!product.repository && !github),activeActor:active&&work?"CODEX":null,queuedActor:status==="QUEUED"?(ball==="CODEX"?"CODEX":"LCC"):null,currentRun:active&&work?active.executionId:null,blocker,humanGate,failureSummary,latestVerificationSummary,latestGitHubEvidence:issueUrl??github?.repositoryUrl??null };
     }) };
   }
 }
