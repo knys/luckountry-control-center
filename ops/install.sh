@@ -5,6 +5,10 @@ id luckountry >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shel
 install -d -o root -g root -m 0755 /opt/luckountry-control-center /opt/luckountry-control-center/dist /usr/local/libexec
 install -d -o root -g root -m 0750 /etc/luckountry-control-center
 install -d -o luckountry -g luckountry -m 0770 /var/lib/luckountry-control-center
+install -d -o user -g user -m 0750 /home/user/.lcc-commission-watcher
+if ! test -d /home/user/.lcc-commission-watcher/workspace/.git; then
+  runuser -u user -- git clone --quiet https://github.com/knys/luckountry-control-center.git /home/user/.lcc-commission-watcher/workspace
+fi
 cp -R dist/. /opt/luckountry-control-center/dist/
 token_file=/etc/luckountry-control-center/self-commissioning
 if ! test -s "$token_file"; then
@@ -20,6 +24,9 @@ install -o root -g root -m 0755 ops/lcc-tx-maintenance /usr/local/libexec/lcc-tx
 install -o root -g root -m 0440 ops/luckountry-control-center.sudoers /etc/sudoers.d/luckountry-control-center
 visudo -cf /etc/sudoers.d/luckountry-control-center
 install -o root -g root -m 0644 ops/luckountry-control-center.service /etc/systemd/system/luckountry-control-center.service
+install -o root -g root -m 0644 ops/luckountry-commission-watcher.service /etc/systemd/system/luckountry-commission-watcher.service
 systemctl daemon-reload
 systemctl enable luckountry-control-center.service
+systemctl enable luckountry-commission-watcher.service
 systemctl restart luckountry-control-center.service
+systemctl restart luckountry-commission-watcher.service
