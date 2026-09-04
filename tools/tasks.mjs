@@ -22,6 +22,8 @@ async function copyAssets() {
   const files = [
     ["src/public/index.html", "dist/public/index.html"],
     ["src/public/styles.css", "dist/public/styles.css"],
+    ["src/v2/public/index.html", "dist/v2/public/index.html"],
+    ["src/v2/public/styles.css", "dist/v2/public/styles.css"],
     ["config/products.json", "dist/config/products.json"]
   ];
   for (const [source, destination] of files) {

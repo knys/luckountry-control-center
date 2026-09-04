@@ -1,0 +1,30 @@
+[Unit]
+Description=Luckountry Control Center v2 Autonomous Supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=user
+SupplementaryGroups=luckountry
+WorkingDirectory=/opt/luckountry-control-center-v2/current
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=3000
+Environment=LCC_V2_DATA_DIRECTORY=/var/lib/luckountry-control-center/v2
+Environment=LCC_V2_WORKSPACE_ROOT=/home/user/.lcc-v2/workspaces
+Environment=LCC_V2_REPOSITORIES=knys/luckountry-control-center
+Environment=LCC_V2_LABEL=lcc:autonomous
+EnvironmentFile=-/etc/luckountry-control-center/environment
+ExecStart=/usr/bin/node /opt/luckountry-control-center-v2/current/dist/v2/server.js
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/luckountry-control-center /home/user/.lcc-v2
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target
