@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+test "$#" -eq 3 || { echo "request rejected" >&2; exit 64; }
+test "$1" = restart || { echo "operation rejected" >&2; exit 64; }
+service=$2
+key=$3
+test "$service" = luckountry-control-center.service || test "$service" = luckountry-commission-watcher.service || { echo "service rejected" >&2; exit 64; }
+case "$key" in
+  *:restart:1|*:restart:2|*:restart:3) ;;
+  *) echo "idempotency binding rejected" >&2; exit 64 ;;
+esac
+systemctl restart "$service"
+systemctl is-active --quiet "$service"
+echo '{"operation":"fixed-restart","status":"SUCCEEDED"}'

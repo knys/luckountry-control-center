@@ -17,5 +17,12 @@ chown -R root:root "$target_root/dist.next"
 if test -d "$target_root/dist.previous"; then find "$target_root/dist.previous" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; rmdir "$target_root/dist.previous"; fi
 if test -d "$target_root/dist"; then mv "$target_root/dist" "$target_root/dist.previous"; fi
 mv "$target_root/dist.next" "$target_root/dist"
+revision=$(git -C "$source_root" rev-parse HEAD)
+printf '%s\n' "$revision" > "$target_root/REVISION"
+printf '%s\n' "$revision" > /var/lib/luckountry-control-center/expected-revision
+chown root:root "$target_root/REVISION"
+chown luckountry:luckountry /var/lib/luckountry-control-center/expected-revision
+chmod 0644 "$target_root/REVISION"
+chmod 0640 /var/lib/luckountry-control-center/expected-revision
 systemctl restart "$service"
 echo '{"operation":"TX_LCC_DEPLOY_DISABLED","status":"SUCCEEDED","automation":"disabled","execution":false,"verification":false}'

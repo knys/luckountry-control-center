@@ -2,3 +2,5 @@
 luckountry ALL=(root) NOPASSWD: /usr/local/libexec/luckountry-smart-status
 luckountry ALL=(root) NOPASSWD: /usr/local/libexec/lcc-tx-maintenance TX_LCC_DEPLOY_DISABLED knys/luckountry-control-center
 luckountry ALL=(root) NOPASSWD: /usr/local/libexec/lcc-tx-maintenance TX_LCC_RESTART knys/luckountry-control-center
+user ALL=(root) NOPASSWD: /usr/local/libexec/lcc-watchdog-recovery restart luckountry-control-center.service *
+user ALL=(root) NOPASSWD: /usr/local/libexec/lcc-watchdog-recovery restart luckountry-commission-watcher.service *
