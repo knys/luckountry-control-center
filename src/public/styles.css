@@ -46,6 +46,20 @@ header {
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
 }
+.header-status { display: flex; align-items: center; gap: 8px; }
+.watcher-indicator { --watcher: var(--red); min-width: 270px; display: grid; grid-template-columns: 12px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid color-mix(in srgb,var(--watcher) 55%,var(--line)); background: color-mix(in srgb,var(--watcher) 7%,var(--panel)); box-shadow: inset 3px 0 var(--watcher); }
+.watcher-indicator.healthy { --watcher: var(--green); }
+.watcher-indicator.active { --watcher: var(--cyan); }
+.watcher-indicator.warning { --watcher: var(--amber); }
+.watcher-indicator.offline { --watcher: var(--red); }
+.watcher-signal { width: 9px; height: 9px; border-radius: 50%; background: var(--watcher); box-shadow: 0 0 9px var(--watcher); }
+.watcher-indicator.pulsing .watcher-signal { animation: watcher-pulse 2.4s ease-out infinite; }
+.watcher-indicator small,.watcher-indicator em { display: block; color: var(--muted); font-size: 7px; font-style: normal; letter-spacing: .11em; }
+.watcher-indicator strong { display: block; margin: 1px 0; color: var(--watcher); font: 800 13px/1 sans-serif; letter-spacing: .1em; }
+.watcher-metrics { display: flex; gap: 4px; }
+.watcher-metrics b { padding: 3px; border: 1px solid var(--line); color: var(--muted); font-size: 8px; }
+@keyframes watcher-pulse { 0%,60%,100% { opacity: 1; box-shadow: 0 0 7px var(--watcher); } 30% { opacity: .5; box-shadow: 0 0 15px var(--watcher); } }
+@media (prefers-reduced-motion: reduce) { .watcher-indicator.pulsing .watcher-signal { animation: none; } }
 .eyebrow {
   margin: 0 0 3px;
   color: var(--cyan);
@@ -390,6 +404,8 @@ footer {
   header {
     padding-bottom: 9px;
   }
+  .header-status { align-items: stretch; flex-direction: column; }
+  .watcher-indicator { min-width: 230px; }
   .health-stack {
     min-width: 150px;
   }

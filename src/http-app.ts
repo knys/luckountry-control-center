@@ -14,9 +14,10 @@ import type { PilotControl,PilotCycle } from "./domain/pilot.js";
 import type { PilotRecoveryStatus } from "./application/pilot-control.js";
 import { validControlToken,type ProductionSelfCommissioningControl } from "./application/production-self-commissioning.js";
 import type { CommissionInbox,WatcherStatus } from "./application/commission-inbox.js";
+import { watcherView } from "./public/watcher-status.js";
 
 const defaultPublicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
-const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]]]);
+const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/watcher-status.js", ["watcher-status.js", "text/javascript; charset=utf-8"]]]);
 
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
@@ -28,7 +29,7 @@ export function createRequestHandler(products: ProductService, devices: DevicePr
     try {
       const path = new URL(request.url ?? "/", "http://localhost").pathname;
       if(path==="/api/commissions"&&request.method==="GET"&&commission)return json(response,200,{candidates:await commission.inbox.list()});
-      if(path==="/api/commission-watcher"&&request.method==="GET"&&commission)return json(response,200,(await commission.status())??{state:"DEGRADED",failure:"status unavailable"});
+      if(path==="/api/commission-watcher"&&request.method==="GET"&&commission)return json(response,200,watcherView(await commission.status()));
       if(path==="/api/internal/commission-deploy"&&request.method==="POST"&&commission?.deployment){const remote=request.socket?.remoteAddress??"";if(!["127.0.0.1","::1","::ffff:127.0.0.1"].includes(remote))return json(response,403,{error:"loopback_required"});if(!validControlToken(request,commission.deployment.token))return json(response,401,{error:"unauthorized"});commission.deployment.request();return json(response,202,{status:"accepted",operation:"TX_LCC_DEPLOY_DISABLED"})}
       const commissionAction=path.match(/^\/api\/commissions\/([A-Za-z0-9-]+)\/commission$/);
       const runControl=path.match(/^\/api\/commission-runs\/([A-Za-z0-9._-]{1,100})\/(recover|human-gate)$/);
