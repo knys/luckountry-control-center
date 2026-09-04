@@ -62,6 +62,14 @@ test("never reports RUNNING without a matching active execution",async()=>{
   assert.equal(product.currentRun,null);
 });
 
+test("BLOCKED exposes the exact latest execution evidence",async()=>{
+  const work={id:"github:knys/repo:9",source:{repository:"knys/repo",externalId:"9"},title:"修復",sourceUrl:"https://github.com/knys/repo/issues/9",workState:"FAILED",ballHolder:"LCC",nextAction:{summary:"Investigate execution failure"},blocker:null,evidence:[]};
+  const execution={executionId:"run-9",workItemId:work.id,resultStatus:"TIMED_OUT",startedAt:"x",finishedAt:"y",summary:"worker transport timed out"};
+  const product=(await new ProductService(manifest,{fetch:async()=>new Map()},60_000,()=>100_000,async()=>({workItems:[work],executions:[execution]})).getProducts()).products[0]!;
+  assert.equal(product.status,"BLOCKED");
+  assert.match(product.blocker??"",/run-9 TIMED_OUT: worker transport timed out/);
+});
+
 test("validates product status and ball", () => {
   assert.throws(() => parseProductsManifest({ version: 1, products: [{ ...item, status: "BROKEN" }] }), /status/);
   assert.throws(() => parseProductsManifest({ version: 1, products: [{ ...item, ball: "ROBOT" }] }), /ball/);
