@@ -1,4 +1,5 @@
 import { collectSystemStatus } from "./system.js";
+import { RemoteWorkerRegistry } from "./infrastructure/remote-execution.js";
 
 export type DeviceState = "ONLINE" | "WARNING" | "OFFLINE";
 
@@ -144,9 +145,17 @@ export class LocalDeviceProvider implements DeviceProvider {
   }
 }
 
+export class WorkerDeviceProvider implements DeviceProvider {
+  readonly id="gtx1060";
+  constructor(private readonly registry:RemoteWorkerRegistry,private readonly workerId:string,private readonly baseUrl:string){}
+  async getStatus():Promise<DeviceStatus>{const descriptor=await this.registry.get(this.workerId),online=descriptor?.status==="ONLINE";return{id:this.id,name:"GTX1060 PC",hostname:online?"GTX1060":null,status:online?"ONLINE":"OFFLINE",os:online?`LCC Worker ${descriptor.agentVersion??"unknown"} / ${descriptor.codexVersion??"Codex unavailable"}`:null,cpuUsagePercent:null,cpuTemperatureC:null,memory:emptyCapacity(),filesystem:emptyCapacity(),ipv4:online?new URL(this.baseUrl).hostname:null,uptimeSeconds:null,lastSeen:online?new Date().toISOString():null};}
+}
+
 export function createDeviceProviders(environment: NodeJS.ProcessEnv = process.env): DeviceProvider[] {
+  const workerId=environment.WORKER_ID?.trim(),workerUrl=environment.WORKER_URL?.trim(),keyId=environment.WORKER_HMAC_KEY_ID?.trim(),secret=environment.WORKER_HMAC_SECRET;
+  const gtx=workerId&&workerUrl&&keyId&&secret?new WorkerDeviceProvider(new RemoteWorkerRegistry([{workerId,baseUrl:workerUrl,credentials:{keyId,secret}}]),workerId,workerUrl):new RemoteDeviceProvider("gtx1060", "GTX1060 PC", environment.DEVICE_GTX1060_URL);
   return [
-    new RemoteDeviceProvider("gtx1060", "GTX1060 PC", environment.DEVICE_GTX1060_URL),
+    gtx,
     new RemoteDeviceProvider("tobie-box", "TOBIE BOX", environment.DEVICE_TOBIE_URL),
     new LocalDeviceProvider()
   ];
