@@ -46,6 +46,7 @@ observable behavior and preserve all prior LCC-008 durable state and history.
 | AC-21 | Real run: LCC-008 AC-32..35 | One self-commissioning run completes remaining real acceptance from actual durable state. | Durable run + controller/worker/GitHub evidence. |
 | AC-22 | Real run Human action ledger | At most initial approval/start and genuine final promotion decision; no command/log copy transport. | Run history actor/gate ledger. |
 | AC-23 | Real run actor timeline | Every observed state accurately names active/queued actor, execution, next gate, or no-actor reason. | Timestamped actor/run evidence. |
+| AC-24 | `production-self-commissioning` behavioral suite | The authenticated fixed control surface creates only `LCC008_REAL_ACCEPTANCE`, observes a real actor after start, rejects duplicate start, persists cancel/restart truth, and cannot accept arbitrary execution input. | Production wiring suite and deterministic production-path canary. |
 
 ## Implementation and RED order
 
@@ -70,4 +71,3 @@ observable behavior and preserve all prior LCC-008 durable state and history.
 - LCC-008 manual bridge-heavy completion is not a substitute for LCC-009.
 - Neither Issue #18 nor Issue #16 is automatically closed.
 - No product repository is deployed or released.
-

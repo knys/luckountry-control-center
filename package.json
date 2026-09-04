@@ -16,7 +16,8 @@
     "canary:verification": "node dist/worker/verification-canary.js",
     "canary:pilot": "node dist/worker/pilot-canary.js",
     "canary:evidence": "node dist/application/evidence-canary.js",
-    "canary:self-commissioning": "node dist/application/self-commissioning-canary-cli.js"
+    "canary:self-commissioning": "node dist/application/self-commissioning-canary-cli.js",
+    "canary:production-wiring": "node dist/application/production-wiring-canary.js"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
