@@ -2,7 +2,7 @@ import{randomUUID}from"node:crypto";import{newJob,transition,type JobState,type 
 export interface DiscoveredIssue{issueId:string;repository:string;number:number;url:string;title:string;revision:string;closed:boolean;labels:string[]}
 export interface ExecutionUpdate{state:"ACTIVE"|"VERIFYING"|"MERGING";pid?:number;action:string;nextAction:string|null;heartbeatAt?:string;branch?:string;commitSha?:string;prNumber?:number;prUrl?:string;ciStatus?:V2Job["ciStatus"]}
 export interface ExecutionResult{ok:boolean;retryable:boolean;failure?:string;branch?:string;commitSha?:string;prNumber?:number;prUrl?:string;ciStatus?:V2Job["ciStatus"];mainSha?:string}
-export interface V2Ports{discover():Promise<DiscoveredIssue[]>;execute(job:V2Job,update:(value:ExecutionUpdate)=>Promise<void>):Promise<ExecutionResult>;closeIssue(job:V2Job):Promise<void>;processAlive(pid:number):boolean}
+export interface V2Ports{discover():Promise<DiscoveredIssue[]>;execute(job:V2Job,update:(value:ExecutionUpdate)=>Promise<void>):Promise<ExecutionResult>;closeIssue(job:V2Job):Promise<void>;processAlive(pid:number):boolean;stop?():void}
 export class V2Supervisor{
   private running=false;private inflight:Promise<void>|null=null;
   constructor(readonly store:V2Store,private ports:V2Ports,private now:()=>number=Date.now,private leaseMs=120_000){}
