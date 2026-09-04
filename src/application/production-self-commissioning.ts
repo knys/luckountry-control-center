@@ -39,8 +39,6 @@ function profileSteps(runId:string):SelfCommissioningStep[]{
     {stepId:"inspect-current-state",kind:"SUPERVISOR_OPERATION",job:op("INSPECT_CURRENT_STATE")},
     {stepId:"tx-reconcile",kind:"TX_OPERATION",request:{operation:"TX_LCC_RECONCILE",idempotencyKey:key("tx-reconcile")}},
     {stepId:"assert-remediation-eligibility",kind:"SUPERVISOR_OPERATION",job:op("ASSERT_REMEDIATION_ELIGIBILITY")},
-    {stepId:"gtx-preflight",kind:"GTX_OPERATION",request:{operation:"GTX_WORKSPACE_PREFLIGHT",idempotencyKey:key("gtx-preflight"),workspaceId:"tobie-pilot"}},
-    {stepId:"gtx-descriptor",kind:"GTX_OPERATION",request:{operation:"GTX_WORKER_DESCRIPTOR",idempotencyKey:key("gtx-descriptor")}},
     {stepId:"enable-bounded-pilot",kind:"SUPERVISOR_OPERATION",job:op("ENABLE_BOUNDED_PILOT")},
     {stepId:"codex-job",kind:"CODEX_JOB",job},
     {stepId:"observe-execution",kind:"SUPERVISOR_OPERATION",job:op("OBSERVE_EXECUTION")},
