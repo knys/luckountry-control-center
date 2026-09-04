@@ -206,6 +206,9 @@ h1 span {
 .product-row:last-child {
   border-bottom: 0;
 }
+#products .product-row { cursor: pointer; }
+#products .product-row:hover,
+#products .product-row:focus-visible { background: rgba(73,217,232,.08); outline: 1px solid var(--cyan); outline-offset: -1px; }
 .product-row > span,
 .product-row > b,
 .product-row > strong {
@@ -330,6 +333,28 @@ footer {
   font-size: 8px;
   letter-spacing: 0.12em;
 }
+.modal[hidden] { display: none; }
+.modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 3vh 4vw; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(1,7,9,.86); backdrop-filter: blur(3px); }
+.product-detail { position: relative; width: min(1400px,92vw); max-height: 92vh; display: grid; grid-template-rows: auto minmax(0,1fr); border: 1px solid var(--cyan); background: #09171c; box-shadow: 0 0 45px rgba(73,217,232,.22); outline: none; }
+.detail-header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+.detail-header h2 { margin: 0; font: 800 clamp(22px,3vw,38px)/1 sans-serif; letter-spacing: .04em; }
+.modal-close { border: 1px solid var(--cyan); background: transparent; color: var(--cyan); padding: 9px 12px; font: 700 11px/1 monospace; cursor: pointer; }
+.modal-close:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+.detail-body { overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 28px; }
+.detail-badges { display: flex; gap: 10px; margin-bottom: 14px; }
+.detail-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.detail-field { min-width: 0; margin-top: 10px; padding: 12px; border: 1px solid var(--line); background: rgba(14,32,37,.7); }
+.detail-field h3 { margin: 0 0 8px; color: var(--muted); font-size: 10px; letter-spacing: .12em; }
+.detail-field p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #eef8f9; font: 13px/1.55 "DejaVu Sans Mono",Consolas,monospace; }
+.detail-field a { color: var(--cyan); overflow-wrap: anywhere; }
+.detail-field ul { margin: 0; padding-left: 20px; line-height: 1.7; overflow-wrap: anywhere; }
+.detail-field small { color: var(--muted); }
+.detail-wide { width: 100%; }
+.emphasis-human { border-color: var(--amber); box-shadow: inset 3px 0 var(--amber); }
+.emphasis-blocked { border-color: var(--red); box-shadow: inset 3px 0 var(--red); }
+.emphasis-running { border-color: var(--cyan); box-shadow: inset 3px 0 var(--cyan); }
+.modal-open { overflow: hidden !important; }
 @media (max-width: 900px) {
   html,
   body {
@@ -365,4 +390,7 @@ footer {
   footer {
     margin-top: 10px;
   }
+  .modal { padding: 10px; }
+  .product-detail { width: 100%; max-height: calc(100vh - 20px); }
+  .detail-grid { grid-template-columns: 1fr; }
 }

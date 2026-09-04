@@ -27,6 +27,7 @@ test("routes active work only to the matching product in a shared repository",as
   assert.equal(result.products.find(value=>value.id==="keiba")?.status,"RUNNING");
   assert.equal(result.products.find(value=>value.id==="keiba")?.activeActor,"CODEX");
   assert.equal(result.products.find(value=>value.id==="keiba")?.issueNumber,174);
+  assert.equal(result.products.find(value=>value.id==="keiba")?.issueTitle,"KEIBA Operations");
   assert.equal(result.products.find(value=>value.id==="keiba")?.issueUrl,work.sourceUrl);
   assert.match(result.products.find(value=>value.id==="keiba")?.nextActionJa??"",/Issue #174/);
   assert.equal(result.products.find(value=>value.id==="draw")?.status,"UNKNOWN");
@@ -68,6 +69,20 @@ test("BLOCKED exposes the exact latest execution evidence",async()=>{
   const product=(await new ProductService(manifest,{fetch:async()=>new Map()},60_000,()=>100_000,async()=>({workItems:[work],executions:[execution]})).getProducts()).products[0]!;
   assert.equal(product.status,"BLOCKED");
   assert.match(product.blocker??"",/run-9 TIMED_OUT: worker transport timed out/);
+  assert.equal(product.failureSummary,"TIMED_OUT: worker transport timed out");
+});
+
+test("product detail UI is structured, accessible, closable, and polling-safe",async()=>{
+  const [markup,script,styles]=await Promise.all([readFile("src/public/index.html","utf8"),readFile("src/public/app.ts","utf8"),readFile("src/public/styles.css","utf8")]);
+  assert.match(markup,/role="dialog" aria-modal="true" aria-labelledby="product-detail-title"/);
+  assert.match(script,/data-product-id=.*tabindex="0" role="button"/);
+  assert.match(script,/event\.key==="Escape"/);
+  assert.match(script,/event\.key!=="Tab"/);
+  assert.match(script,/data-modal-close/);
+  assert.match(script,/renderOpenProduct\(\);const states=/, "poll refresh rerenders an open detail from the same Product SSOT");
+  for(const heading of ["NEXT ACTION","HUMAN ACTION","HUMAN GATE / WHY HUMAN?","EXACT BLOCKER","RELATED WORK"])assert.match(script,new RegExp(heading.replace(/[?]/g,"\\?")));
+  assert.match(styles,/\.detail-body \{ overflow-y: auto/);
+  assert.match(styles,/white-space: pre-wrap; overflow-wrap: anywhere/);
 });
 
 test("validates product status and ball", () => {
