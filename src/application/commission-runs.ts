@@ -37,6 +37,7 @@ export class BoundedLocalCodexExecutor {
     const branch=`lcc/commission/${job.issueNumber}-${base.stdout.trim().slice(0,8)}`;const switched=await this.run("/usr/bin/git",["switch","-c",branch],cwd);if(switched.code)return{status:"FAILED",summary:"Dedicated branch creation failed",evidence:[],retryable:true};
     const prompt=`Repository: ${job.repository}\nIssue: https://github.com/${job.repository}/issues/${job.issueNumber}\n${job.objective}\nInspect the Issue as SSOT. Implement and test only its bounded scope. Commit all intended changes on the current dedicated branch. Do not push, merge, deploy, expose secrets, alter unrelated work, or request Human command/log transport. Future Human acceptance is not a pre-implementation gate.`;
     const codex=await this.codex(prompt,cwd);if(codex.code)return{status:"FAILED",summary:`Codex exited ${codex.code}`,evidence:[],retryable:true};
+    const finalized=await finalizeCandidate(job,cwd,base.stdout.trim(),profile.paths,this.run);if(finalized)return finalized;
     const post=await verifyCandidate(job,cwd,base.stdout.trim(),profile.paths,profile.checks,this.run);if(post.status!=="SUCCEEDED")return post;
     const promoted=await promote(job,cwd,branch,profile.deploy,this.run);if(promoted.status!=="SUCCEEDED")return promoted;
     if(job.humanGate)return{status:"WAITING_HUMAN",summary:"Automated implementation, promotion and deploy completed",evidence:[...post.evidence,...promoted.evidence],humanGate:job.humanGate};
@@ -44,6 +45,16 @@ export class BoundedLocalCodexExecutor {
   }
   private codex(prompt:string,cwd:string){return new Promise<Output>(resolve=>{const child=spawn(this.codexPath,["exec","--approve-for-me",prompt],{cwd,stdio:"inherit",shell:false});this.child=child;let settled=false;const done=(x:Output)=>{if(settled)return;settled=true;this.child=null;resolve(x)};child.once("exit",code=>done({code:code??1,stdout:"",stderr:""}));child.once("error",error=>done({code:1,stdout:"",stderr:error.message}))})}
   stop(){this.child?.kill("SIGTERM")}
+}
+
+export async function finalizeCandidate(job:CodexJob,cwd:string,base:string,pathBoundary:RegExp,run:FixedRunner):Promise<CommissioningResult|null>{
+  const head=await run("/usr/bin/git",["rev-parse","HEAD"],cwd);if(head.code)return{status:"BLOCKED",summary:"Candidate HEAD unavailable",evidence:[]};if(head.stdout.trim()!==base)return null;
+  const status=await run("/usr/bin/git",["status","--porcelain"],cwd),diff=await run("/usr/bin/git",["diff","--no-ext-diff"],cwd);if(status.code||diff.code)return{status:"BLOCKED",summary:"Candidate worktree inspection failed",evidence:[]};
+  const lines=status.stdout.split(/\r?\n/).filter(Boolean),paths=lines.map(line=>line.slice(3));
+  const secret=/(gh[opsu]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|(?:password|token|secret)\s*[=:]\s*[^\s"']{8,})/i;
+  if(!lines.length||lines.some(line=>line.startsWith("??")||line.includes(" -> "))||paths.some(path=>!pathBoundary.test(path))||secret.test(diff.stdout))return{status:"BLOCKED",summary:"Uncommitted candidate is empty, untracked, renamed, outside boundary, or secret-shaped",evidence:[]};
+  const staged=await run("/usr/bin/git",["add","--update","--",...paths],cwd);if(staged.code)return{status:"BLOCKED",summary:"Bounded candidate staging failed",evidence:[]};
+  const committed=await run("/usr/bin/git",["commit","-m",`Commission #${job.issueNumber}: finalize bounded actor changes`],cwd);return committed.code?{status:"BLOCKED",summary:"Bounded candidate commit failed",evidence:[]}:null;
 }
 
 export async function verifyCandidate(job:CodexJob,cwd:string,base:string,pathBoundary:RegExp,checks:readonly [string,string[]][],run:FixedRunner):Promise<CommissioningResult>{
