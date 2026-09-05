@@ -11,6 +11,35 @@ function Capacity($used, $total) {
     @{ usedBytes = [long]$used; totalBytes = [long]$total; usedPercent = if ($total) { [math]::Round($used / $total * 100, 1) } else { $null } }
 }
 
+function HardwareTemperatures {
+    $temperatures = @{ cpu = $null; storage = $null; gpu = $null }
+    foreach ($namespace in @("root/LibreHardwareMonitor", "root/OpenHardwareMonitor")) {
+        try {
+            $sensors = Get-CimInstance -Namespace $namespace -ClassName Sensor -ErrorAction Stop | Where-Object { $_.SensorType -eq "Temperature" }
+            $cpu = $sensors | Where-Object { $_.Parent -match "cpu" -or $_.Name -match "CPU (Package|Core)" } | Measure-Object Value -Maximum
+            $storage = $sensors | Where-Object { $_.Parent -match "(hdd|ssd|nvme)" -or $_.Name -match "(Drive|NVMe|SSD)" } | Measure-Object Value -Maximum
+            $gpu = $sensors | Where-Object { $_.Parent -match "gpu" -or $_.Name -match "GPU" } | Measure-Object Value -Maximum
+            if ($cpu.Count) { $temperatures.cpu = [double]$cpu.Maximum }
+            if ($storage.Count) { $temperatures.storage = [double]$storage.Maximum }
+            if ($gpu.Count) { $temperatures.gpu = [double]$gpu.Maximum }
+            break
+        } catch { }
+    }
+    if ($null -eq $temperatures.storage) {
+        try {
+            $storage = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_StorageReliabilityCounter -ErrorAction Stop | Measure-Object Temperature -Maximum
+            if ($storage.Count -and [double]$storage.Maximum -gt 0) { $temperatures.storage = [double]$storage.Maximum }
+        } catch { }
+    }
+    if ($null -eq $temperatures.gpu) {
+        try {
+            $gpu = & nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>$null | Measure-Object -Maximum
+            if ($gpu.Count) { $temperatures.gpu = [double]$gpu.Maximum }
+        } catch { }
+    }
+    $temperatures
+}
+
 function Telemetry {
     $os = Get-CimInstance Win32_OperatingSystem
     $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -20,12 +49,15 @@ function Telemetry {
     $totalDisk = [long]$disk.Size
     $usedDisk = $totalDisk - [long]$disk.FreeSpace
     $address = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1 -ExpandProperty IPAddress
+    $temperatures = HardwareTemperatures
     @{
         timestamp = [DateTime]::UtcNow.ToString("o")
         hostname = $env:COMPUTERNAME
         os = $os.Caption
         cpuUsagePercent = [double]$cpu.LoadPercentage
-        cpuTemperatureC = $null # Standard Windows APIs do not reliably expose CPU package temperature.
+        cpuTemperatureC = $temperatures.cpu
+        storageTemperatureC = $temperatures.storage
+        gpuTemperatureC = $temperatures.gpu
         memory = Capacity ($totalMemory - $freeMemory) $totalMemory
         filesystem = Capacity $usedDisk $totalDisk
         ipv4 = $address

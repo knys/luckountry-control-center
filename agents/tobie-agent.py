@@ -5,6 +5,7 @@ import os
 import platform
 import shutil
 import socket
+import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -47,6 +48,34 @@ def cpu_temperature():
     return round(max(values), 1) if values else None
 
 
+def storage_temperature():
+    values = []
+    for root, _, files in os.walk("/sys/class/hwmon"):
+        name = read(os.path.join(root, "name")).strip().lower()
+        if not any(kind in name for kind in ("nvme", "drivetemp")):
+            continue
+        for filename in files:
+            if filename.startswith("temp") and filename.endswith("_input"):
+                try:
+                    value = float(read(os.path.join(root, filename)).strip())
+                    values.append(value / 1000 if value > 1000 else value)
+                except ValueError:
+                    pass
+    return round(max(values), 1) if values else None
+
+
+def gpu_temperature():
+    try:
+        output = subprocess.run(
+            ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+            check=True, capture_output=True, text=True, timeout=2
+        ).stdout
+        values = [float(value) for value in output.split()]
+        return round(max(values), 1) if values else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
 def memory():
     rows = {row.split(":", 1)[0]: int(row.split()[1]) * 1024 for row in read("/proc/meminfo").splitlines() if ":" in row}
     total, available = rows.get("MemTotal", 0), rows.get("MemAvailable", 0)
@@ -72,6 +101,7 @@ def telemetry():
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hostname": socket.gethostname(), "os": os_name,
         "cpuUsagePercent": cpu_usage(), "cpuTemperatureC": cpu_temperature(),
+        "storageTemperatureC": storage_temperature(), "gpuTemperatureC": gpu_temperature(),
         "memory": memory(),
         "filesystem": {"usedBytes": disk.used, "totalBytes": disk.total, "usedPercent": round(disk.used / disk.total * 100, 1)},
         "ipv4": ipv4(), "uptimeSeconds": int(float(read("/proc/uptime").split()[0])),

@@ -1,5 +1,6 @@
 import { collectSystemStatus } from "./system.js";
 import { RemoteWorkerRegistry } from "./infrastructure/remote-execution.js";
+import { emptyTemperatureHistory, type DeviceTemperatureHistory, type TemperatureHistory, type TemperatureValues } from "./temperature-history.js";
 
 export type DeviceState = "ONLINE" | "WARNING" | "OFFLINE";
 
@@ -17,6 +18,9 @@ export interface DeviceStatus {
   os: string | null;
   cpuUsagePercent: number | null;
   cpuTemperatureC: number | null;
+  storageTemperatureC: number | null;
+  gpuTemperatureC: number | null;
+  temperatures: DeviceTemperatureHistory;
   memory: CapacityStatus;
   filesystem: CapacityStatus;
   ipv4: string | null;
@@ -35,6 +39,8 @@ interface AgentTelemetry {
   os: string;
   cpuUsagePercent: number | null;
   cpuTemperatureC: number | null;
+  storageTemperatureC?: number | null;
+  gpuTemperatureC?: number | null;
   memory: CapacityStatus;
   filesystem: CapacityStatus;
   ipv4: string | null;
@@ -90,6 +96,8 @@ function parseTelemetry(value: unknown): AgentTelemetry | null {
     os: item.os,
     cpuUsagePercent: finite(item.cpuUsagePercent),
     cpuTemperatureC: finite(item.cpuTemperatureC),
+    storageTemperatureC: finite(item.storageTemperatureC),
+    gpuTemperatureC: finite(item.gpuTemperatureC),
     memory: capacity(item.memory),
     filesystem: capacity(item.filesystem),
     ipv4: typeof item.ipv4 === "string" ? item.ipv4 : null,
@@ -97,8 +105,13 @@ function parseTelemetry(value: unknown): AgentTelemetry | null {
   };
 }
 
+function temperatureValues(telemetry: AgentTelemetry): TemperatureValues {
+  return { cpu: telemetry.cpuTemperatureC, storage: finite(telemetry.storageTemperatureC), gpu: finite(telemetry.gpuTemperatureC) };
+}
+
 function status(id: string, name: string, telemetry: AgentTelemetry, now: number, thresholds: DeviceThresholds): DeviceStatus {
-  return { id, name, hostname: telemetry.hostname, status: stateFor(telemetry, now, thresholds), os: telemetry.os, cpuUsagePercent: telemetry.cpuUsagePercent, cpuTemperatureC: telemetry.cpuTemperatureC, memory: telemetry.memory, filesystem: telemetry.filesystem, ipv4: telemetry.ipv4, uptimeSeconds: telemetry.uptimeSeconds, lastSeen: telemetry.timestamp };
+  const values = temperatureValues(telemetry);
+  return { id, name, hostname: telemetry.hostname, status: stateFor(telemetry, now, thresholds), os: telemetry.os, cpuUsagePercent: telemetry.cpuUsagePercent, cpuTemperatureC: telemetry.cpuTemperatureC, storageTemperatureC: values.storage, gpuTemperatureC: values.gpu, temperatures: emptyTemperatureHistory(values), memory: telemetry.memory, filesystem: telemetry.filesystem, ipv4: telemetry.ipv4, uptimeSeconds: telemetry.uptimeSeconds, lastSeen: telemetry.timestamp };
 }
 
 export class RemoteDeviceProvider implements DeviceProvider {
@@ -123,7 +136,8 @@ export class RemoteDeviceProvider implements DeviceProvider {
       if (this.lastRequestFailed && result.status === "ONLINE") result.status = "WARNING";
       return result;
     }
-    return { id: this.id, name: this.name, hostname: null, status: "OFFLINE", os: null, cpuUsagePercent: null, cpuTemperatureC: null, memory: emptyCapacity(), filesystem: emptyCapacity(), ipv4: null, uptimeSeconds: null, lastSeen: null };
+    const values: TemperatureValues = { cpu: null, storage: null, gpu: null };
+    return { id: this.id, name: this.name, hostname: null, status: "OFFLINE", os: null, cpuUsagePercent: null, cpuTemperatureC: null, storageTemperatureC: null, gpuTemperatureC: null, temperatures: emptyTemperatureHistory(values), memory: emptyCapacity(), filesystem: emptyCapacity(), ipv4: null, uptimeSeconds: null, lastSeen: null };
   }
 }
 
@@ -137,6 +151,7 @@ export class LocalDeviceProvider implements DeviceProvider {
     const telemetry: AgentTelemetry = {
       timestamp: system.timestamp, hostname: system.host.hostname, os: system.host.os,
       cpuUsagePercent: system.cpu.usagePercent, cpuTemperatureC: temperatures.length ? Math.max(...temperatures) : null,
+      storageTemperatureC: system.smart.temperatureC, gpuTemperatureC: system.gpu.temperatureC,
       memory: { usedBytes: system.memory.usedBytes, totalBytes: system.memory.totalBytes, usedPercent: system.memory.usedPercent },
       filesystem: { usedBytes: system.filesystem.usedBytes, totalBytes: system.filesystem.totalBytes, usedPercent: system.filesystem.usedPercent },
       ipv4: system.network.ipv4, uptimeSeconds: system.host.uptimeSeconds
@@ -147,13 +162,14 @@ export class LocalDeviceProvider implements DeviceProvider {
 
 export class WorkerDeviceProvider implements DeviceProvider {
   readonly id="gtx1060";
-  constructor(private readonly registry:RemoteWorkerRegistry,private readonly workerId:string,private readonly baseUrl:string){}
-  async getStatus():Promise<DeviceStatus>{const descriptor=await this.registry.get(this.workerId),online=descriptor?.status==="ONLINE";return{id:this.id,name:"GTX1060 PC",hostname:online?"GTX1060":null,status:online?"ONLINE":"OFFLINE",os:online?`LCC Worker ${descriptor.agentVersion??"unknown"} / ${descriptor.codexVersion??"Codex unavailable"}`:null,cpuUsagePercent:null,cpuTemperatureC:null,memory:emptyCapacity(),filesystem:emptyCapacity(),ipv4:online?new URL(this.baseUrl).hostname:null,uptimeSeconds:null,lastSeen:online?new Date().toISOString():null};}
+  private readonly telemetry:RemoteDeviceProvider|null;
+  constructor(private readonly registry:RemoteWorkerRegistry,private readonly workerId:string,private readonly baseUrl:string,telemetryEndpoint?:string){this.telemetry=telemetryEndpoint?new RemoteDeviceProvider(this.id,"GTX1060 PC",telemetryEndpoint):null;}
+  async getStatus():Promise<DeviceStatus>{const [descriptor,telemetry]=await Promise.all([this.registry.get(this.workerId),this.telemetry?.getStatus()]),online=descriptor?.status==="ONLINE";if(telemetry?.lastSeen)return telemetry;const values:TemperatureValues={cpu:null,storage:null,gpu:null};return{id:this.id,name:"GTX1060 PC",hostname:online?"GTX1060":null,status:online?"ONLINE":"OFFLINE",os:online?`LCC Worker ${descriptor.agentVersion??"unknown"} / ${descriptor.codexVersion??"Codex unavailable"}`:null,cpuUsagePercent:null,cpuTemperatureC:null,storageTemperatureC:null,gpuTemperatureC:null,temperatures:emptyTemperatureHistory(values),memory:emptyCapacity(),filesystem:emptyCapacity(),ipv4:online?new URL(this.baseUrl).hostname:null,uptimeSeconds:null,lastSeen:online?new Date().toISOString():null};}
 }
 
 export function createDeviceProviders(environment: NodeJS.ProcessEnv = process.env): DeviceProvider[] {
   const workerId=environment.WORKER_ID?.trim(),workerUrl=environment.WORKER_URL?.trim(),keyId=environment.WORKER_HMAC_KEY_ID?.trim(),secret=environment.WORKER_HMAC_SECRET;
-  const gtx=workerId&&workerUrl&&keyId&&secret?new WorkerDeviceProvider(new RemoteWorkerRegistry([{workerId,baseUrl:workerUrl,credentials:{keyId,secret}}]),workerId,workerUrl):new RemoteDeviceProvider("gtx1060", "GTX1060 PC", environment.DEVICE_GTX1060_URL);
+  const gtx=workerId&&workerUrl&&keyId&&secret?new WorkerDeviceProvider(new RemoteWorkerRegistry([{workerId,baseUrl:workerUrl,credentials:{keyId,secret}}]),workerId,workerUrl,environment.DEVICE_GTX1060_URL):new RemoteDeviceProvider("gtx1060", "GTX1060 PC", environment.DEVICE_GTX1060_URL);
   return [
     gtx,
     new RemoteDeviceProvider("tobie-box", "TOBIE BOX", environment.DEVICE_TOBIE_URL),
@@ -161,6 +177,12 @@ export function createDeviceProviders(environment: NodeJS.ProcessEnv = process.e
   ];
 }
 
-export async function collectDeviceStatuses(providers: DeviceProvider[]): Promise<DeviceStatus[]> {
-  return Promise.all(providers.map((provider) => provider.getStatus()));
+export async function collectDeviceStatuses(providers: DeviceProvider[], history?: TemperatureHistory): Promise<DeviceStatus[]> {
+  return Promise.all(providers.map(async provider => {
+    const device = await provider.getStatus();
+    if (!history || !device.lastSeen) return device;
+    const values: TemperatureValues = { cpu: device.cpuTemperatureC, storage: device.storageTemperatureC, gpu: device.gpuTemperatureC };
+    try { device.temperatures = await history.observe(device.id, device.lastSeen, values, new Date().toISOString()); } catch { /* history failures must not break Machine Status */ }
+    return device;
+  }));
 }
