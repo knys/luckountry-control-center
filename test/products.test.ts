@@ -11,7 +11,7 @@ const metadata: GitHubMetadata = { repository: "knys/repo", repositoryUrl: "http
 
 test("parses the checked-in products manifest", async () => {
   const parsed = parseProductsManifest(JSON.parse(await readFile("config/products.json", "utf8")));
-  assert.equal(parsed.products.length, 11);
+  assert.equal(parsed.products.length, 21);
   assert.equal(parsed.products.filter((product) => product.repository === "knys/TOBIE").length, 5);
 });
 

@@ -1,0 +1,19 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { ManifestManager } from "../src/v2/manifest-manager.js";
+import { GhV2Ports } from "../src/v2/production.js";
+
+const manifest=(products:unknown[])=>JSON.stringify({version:1,products});
+const product=(id:string,repository:string,name=id)=>({id,name,repository,summary:"safe"});
+async function fixture(){const dir=await mkdtemp(join(tmpdir(),"lcc-manifest-")),path=join(dir,"products.json");await writeFile(path,manifest([product("a","knys/a")]));return{dir,path,cleanup:()=>rm(dir,{recursive:true,force:true})}}
+
+test("startup, add, remove, change and idempotent reload update the live registry",async t=>{const f=await fixture();t.after(f.cleanup);const events:string[]=[];const manager=await ManifestManager.open(f.path,{log:e=>events.push(e.event)});assert.deepEqual(manager.repositories(),["knys/a"]);const first=manager.status();await writeFile(f.path,manifest([product("a","knys/a","renamed"),product("b","knys/b")]));assert.equal((await manager.reload()).lastManifestReloadResult,"SUCCEEDED");assert.deepEqual(manager.repositories(),["knys/a","knys/b"]);assert.equal(manager.products()[0]?.name,"renamed");await writeFile(f.path,manifest([product("b","knys/b")]));await manager.reload();assert.deepEqual(manager.repositories(),["knys/b"]);const version=manager.status().manifestVersion;await manager.reload();assert.equal(manager.status().manifestVersion,version);assert.notEqual(first.manifestVersion,version);assert.ok(events.includes("MANIFEST_RELOAD_STARTED"));assert.ok(events.includes("MANIFEST_RELOAD_SUCCEEDED"))});
+
+test("invalid JSON and validation failure retain last known good without changing runtime jobs",async t=>{const f=await fixture();t.after(f.cleanup);const manager=await ManifestManager.open(f.path);for(const invalid of["{",manifest([{id:"bad",name:"bad",repository:"evil/repo"}])]){await writeFile(f.path,invalid);const status=await manager.reload();assert.equal(status.lastManifestReloadResult,"FAILED");assert.deepEqual(manager.repositories(),["knys/a"]);assert.ok(status.lastManifestReloadError)}assert.equal(manager.status().repositoryCount,1)});
+
+test("atomic replacement is detected and duplicate events are debounced",async t=>{const f=await fixture();t.after(f.cleanup);const manager=await ManifestManager.open(f.path,{debounceMs:20});manager.start();t.after(()=>manager.stop());const replacement=join(f.dir,"next.json");await writeFile(replacement,manifest([product("a","knys/a"),product("b","knys/b")]));await rename(replacement,f.path);for(let i=0;i<40&&manager.repositories().length!==2;i++)await new Promise(r=>setTimeout(r,10));assert.deepEqual(manager.repositories(),["knys/a","knys/b"]);const version=manager.status().manifestVersion;await writeFile(f.path,manifest([product("a","knys/a"),product("b","knys/b")]));await new Promise(r=>setTimeout(r,80));assert.equal(manager.status().manifestVersion,version)});
+
+test("dynamic registry adds and removes repositories from subsequent discovery; GitHub failure is isolated",async t=>{const f=await fixture();t.after(f.cleanup);const manager=await ManifestManager.open(f.path),calls:string[]=[];const run=async(_file:string,args:string[])=>{const repo=args[args.indexOf("--repo")+1]!;calls.push(repo);if(repo==="knys/b")return{code:1,out:"",err:"temporary"};return args[1]==="issue"?{code:0,out:"[]",err:""}:{code:0,out:"[]",err:""}};const ports=new GhV2Ports([],f.dir,"lcc:autonomous",undefined,run,undefined,()=>manager.products());await ports.discover();assert.deepEqual(calls,["knys/a","knys/a"]);calls.length=0;await writeFile(f.path,manifest([product("b","knys/b")]));await manager.reload();assert.deepEqual(await ports.discover(),[]);assert.deepEqual(calls,["knys/b","knys/b"])});

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+test "$#" -eq 1 || { echo "usage: lcc-v2-manifest-sync MAIN_SHA" >&2; exit 64; }
+revision=$1
+case "$revision" in *[!0-9a-f]*|"") echo "invalid revision" >&2; exit 64;; esac
+test "${#revision}" -eq 40 || { echo "invalid revision" >&2; exit 64; }
+test "$(id -u)" -eq 0 || { echo "root required" >&2; exit 77; }
+source=/opt/luckountry-control-center-v2/source
+target=/opt/luckountry-control-center-v2/current/dist/config/products.json
+/usr/bin/git -C "$source" fetch --force origin main
+remote=$(/usr/bin/git -C "$source" rev-parse origin/main)
+test "$remote" = "$revision" || { echo "requested SHA is not GitHub main" >&2; exit 65; }
+/usr/bin/git -C "$source" show "$revision:config/products.json" > "$target.next"
+/usr/bin/node -e 'const fs=require("fs");const p=process.argv[1],v=JSON.parse(fs.readFileSync(p,"utf8"));if(v.version!==1||!Array.isArray(v.products)||!v.products.length)process.exit(1)' "$target.next"
+chown root:root "$target.next"
+chmod 0644 "$target.next"
+mv -f "$target.next" "$target"
+echo "manifest synced $revision"

@@ -1,2 +1,4 @@
 # The helper validates a single 40-character main SHA and exposes no command/path input.
 user ALL=(root) NOPASSWD: /usr/local/sbin/lcc-v2-deploy [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*
+user ALL=(root) NOPASSWD: /usr/local/sbin/lcc-v2-manifest-sync [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*
+user ALL=(root) NOPASSWD: /usr/local/sbin/lcc-v2-manifest-canary
