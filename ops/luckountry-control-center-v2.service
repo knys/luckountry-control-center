@@ -15,6 +15,7 @@ Environment=LCC_V2_DATA_DIRECTORY=/var/lib/luckountry-control-center/v2
 Environment=LCC_V2_WORKSPACE_ROOT=/home/user/.lcc-v2/workspaces
 Environment=LCC_V2_REPOSITORIES=knys/luckountry-control-center
 Environment=LCC_V2_LABEL=lcc:autonomous
+Environment=LCC_PRODUCTS_MANIFEST=/opt/luckountry-control-center-v2/current/dist/config/products.json
 EnvironmentFile=-/etc/luckountry-control-center/environment
 ExecStart=/usr/bin/node /opt/luckountry-control-center-v2/current/dist/v2/server.js
 Restart=always
