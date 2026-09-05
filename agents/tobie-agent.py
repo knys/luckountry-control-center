@@ -72,6 +72,7 @@ def telemetry():
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hostname": socket.gethostname(), "os": os_name,
         "cpuUsagePercent": cpu_usage(), "cpuTemperatureC": cpu_temperature(),
+        "storageTemperatureC": None, "gpuTemperatureC": None,
         "memory": memory(),
         "filesystem": {"usedBytes": disk.used, "totalBytes": disk.total, "usedPercent": round(disk.used / disk.total * 100, 1)},
         "ipv4": ipv4(), "uptimeSeconds": int(float(read("/proc/uptime").split()[0])),

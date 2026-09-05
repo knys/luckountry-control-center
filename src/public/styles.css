@@ -36,7 +36,7 @@ body:before {
 main {
   height: 100vh;
   display: grid;
-  grid-template-rows: 68px 142px minmax(220px, 1fr) 150px 22px;
+  grid-template-rows: 68px minmax(240px, 42vh) minmax(180px, 1fr) 120px 22px;
   gap: 8px;
   padding: 10px 16px;
 }
@@ -139,14 +139,12 @@ h1 span {
   background: rgba(9, 21, 25, 0.86);
   overflow: hidden;
 }
+.device-table { overflow-y: auto; }
 .device-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 1.55fr 0.72fr 1fr 0.6fr 0.6fr 1fr 1fr 0.9fr 0.8fr;
-  min-height: 30px;
-  align-items: center;
   border-bottom: 1px solid #193038;
 }
+.device-summary { display:grid;grid-template-columns:1.55fr .72fr 1fr .6fr 1fr 1fr .9fr .8fr;min-height:30px;align-items:center; }
 .device-row:last-child {
   border-bottom: 0;
 }
@@ -167,8 +165,8 @@ h1 span {
 .device-row.offline {
   --state: var(--red);
 }
-.device-row > span,
-.device-row > strong {
+.device-summary > span,
+.device-summary > strong {
   min-width: 0;
   padding: 3px 8px;
   white-space: nowrap;
@@ -176,6 +174,10 @@ h1 span {
   text-overflow: ellipsis;
   font-size: 11px;
 }
+.temperature-history{margin:0 8px 7px 24px;border:1px solid #193038;background:#081419;}
+.temperature-row{display:grid;grid-template-columns:.65fr repeat(5,.75fr) 1.35fr;align-items:center;min-height:18px;border-bottom:1px solid #13282e;}
+.temperature-row:last-child{border-bottom:0}.temperature-row>*{padding:2px 6px;font-size:9px;text-align:right;color:#b9cdd1}.temperature-row b{text-align:left;color:var(--cyan)}
+.temperature-header{background:#0e2025}.temperature-header>*{color:var(--muted);font-size:8px;letter-spacing:.04em}
 .device-header {
   min-height: 20px;
   color: var(--muted);
