@@ -95,12 +95,101 @@
     {
       "id": "barepo",
       "name": "BAREPO",
-      "repository": null,
-      "summary": "Control Centerから参照するcanonical GitHub repositoryを特定できていない。",
-      "status": "BLOCKED",
+      "repository": "knys/genba-report",
+      "summary": "現場写真報告アプリ。canonical GitHub repositoryをknys/genba-reportとしてLCC管理対象に確定。",
+      "status": "READY",
       "ball": "LCC",
-      "nextAction": "既存設定、ローカルworkspace、GitHub repository一覧からBAREPOのcanonical repositoryを特定する",
-      "blocker": "Product名BAREPOに対応するcanonical GitHub repositoryの証拠がmanifestとdurable stateに存在しない"
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "check-the-eventlog",
+      "name": "Check the Eventlog",
+      "repository": "knys/check_the_eventlog",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "drive-simulator-android",
+      "name": "Drive Simulator Android",
+      "repository": "knys/drive-simulator-android",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "route-generator",
+      "name": "RouteGenerator",
+      "repository": "knys/RouteGenerator",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "family-screen-timer",
+      "name": "Family Screen Timer",
+      "repository": "knys/family-screen-timer",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "shasou-tanken",
+      "name": "ShasouTanken",
+      "repository": "knys/ShasouTanken",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "drive-assistant-android",
+      "name": "Drive Assistant Android",
+      "repository": "knys/drive-assistant-android",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "ai-voice-office",
+      "name": "AI Voice Office",
+      "repository": "knys/ai-voice-office",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "ready-for-bev",
+      "name": "Ready for BEV",
+      "repository": "knys/Ready-for-BEV",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "tobie-quiz",
+      "name": "TOBIE QUIZ",
+      "repository": "knys/TOBIE-QUIZ",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
+    },
+    {
+      "id": "otr-vtt-minutes",
+      "name": "OTR VTT MINUTES",
+      "repository": "knys/OTR-VTT-MINUTES",
+      "summary": "LCC管理対象として追加。GitHub Issueを自動発見し、安全判定後に自律処理する。",
+      "status": "READY",
+      "ball": "LCC",
+      "nextAction": "Open Issueを自動発見し、Eligibility（実行可否）判定後に安全なIssueから処理する"
     },
     {
       "id": "luckountry-website",
