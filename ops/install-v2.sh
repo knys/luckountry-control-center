@@ -19,6 +19,9 @@ test ! -e "$root/current" || readlink -f "$root/current" > "$backup/previous-rel
 ln -sfn "$release" "$root/current.next"
 mv -Tf "$root/current.next" "$root/current"
 install -o root -g root -m 0644 ops/luckountry-control-center-v2.service /etc/systemd/system/luckountry-control-center-v2.service
+install -o root -g root -m 0755 ops/lcc-v2-deploy /usr/local/sbin/lcc-v2-deploy
+install -o root -g root -m 0440 ops/luckountry-control-center-v2.sudoers /etc/sudoers.d/luckountry-control-center-v2
+/usr/sbin/visudo -cf /etc/sudoers.d/luckountry-control-center-v2
 systemctl daemon-reload
 runuser -u user -- env HOST=127.0.0.1 PORT=3001 LCC_V2_DATA_DIRECTORY=/tmp/lcc-v2-preflight-$$ LCC_PRODUCTS_MANIFEST="$release/dist/config/products.json" /usr/bin/node "$release/dist/v2/server.js" &
 canary=$!
