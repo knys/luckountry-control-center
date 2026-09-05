@@ -15,6 +15,7 @@ import type { PilotRecoveryStatus } from "./application/pilot-control.js";
 import { validControlToken,type ProductionSelfCommissioningControl } from "./application/production-self-commissioning.js";
 import type { CommissionInbox,WatcherStatus } from "./application/commission-inbox.js";
 import { watcherView } from "./public/watcher-status.js";
+import type { TemperatureHistory } from "./temperature-history.js";
 
 const defaultPublicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
 const assets = new Map<string, readonly [string, string]>([["/", ["index.html", "text/html; charset=utf-8"]], ["/styles.css", ["styles.css", "text/css; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/watcher-status.js", ["watcher-status.js", "text/javascript; charset=utf-8"]]]);
@@ -24,7 +25,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>, executions?: () => Promise<ExecutionState>,verifications?:()=>Promise<VerificationState>,automationControl?:()=>Promise<{control:PilotControl;cycles:PilotCycle[];matchedWorkItemIds:string[];workerReady:boolean;recovery?:PilotRecoveryStatus}>,selfCommissioning?:{control:ProductionSelfCommissioningControl;token:string},commission?:{inbox:CommissionInbox;token:string;status:()=>Promise<WatcherStatus|null>;recover?:(runId:string,input:unknown)=>Promise<unknown>;humanDecision?:(runId:string,input:unknown)=>Promise<unknown>;deployment?:{token:string;request:()=>void}}) {
+export function createRequestHandler(products: ProductService, devices: DeviceProvider[], publicDir = defaultPublicDir, runtimeStatus?: () => RuntimeStatus, workItems?: () => Promise<WorkItem[]>, executions?: () => Promise<ExecutionState>,verifications?:()=>Promise<VerificationState>,automationControl?:()=>Promise<{control:PilotControl;cycles:PilotCycle[];matchedWorkItemIds:string[];workerReady:boolean;recovery?:PilotRecoveryStatus}>,selfCommissioning?:{control:ProductionSelfCommissioningControl;token:string},commission?:{inbox:CommissionInbox;token:string;status:()=>Promise<WatcherStatus|null>;recover?:(runId:string,input:unknown)=>Promise<unknown>;humanDecision?:(runId:string,input:unknown)=>Promise<unknown>;deployment?:{token:string;request:()=>void}},temperatureHistory?:TemperatureHistory) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const path = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -41,7 +42,7 @@ export function createRequestHandler(products: ProductService, devices: DevicePr
       if (request.method !== "GET") return json(response, 405, { error: "method_not_allowed" });
       if (path === "/health") return json(response, 200, { status: "ok", service: "luckountry-control-center", version: "0.3.0" });
       if (path === "/api/system-status") return json(response, 200, await collectSystemStatus());
-      if (path === "/api/devices") return json(response, 200, { timestamp: new Date().toISOString(), devices: await collectDeviceStatuses(devices) });
+      if (path === "/api/devices") return json(response, 200, { timestamp: new Date().toISOString(), devices: await collectDeviceStatuses(devices,temperatureHistory) });
       if (path === "/api/products") return json(response, 200, await products.getProducts());
       if (path === "/api/runtime" && runtimeStatus) return json(response, 200, runtimeStatus());
       if (path === "/api/work-items" && workItems) return json(response, 200, { workItems: await workItems() });
