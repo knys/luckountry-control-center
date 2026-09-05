@@ -20,7 +20,13 @@ Open `http://localhost:3000`. API endpoints are `GET /health`, `GET /api/devices
 
 The server supplements this state with default branch, HEAD SHA, open Issue/PR counts, repository URL, and repository update time through one read-only `gh api graphql` process per cache refresh. GitHub credentials never enter an API response or browser code. If GitHub is unavailable, the server returns its latest in-memory metadata with `stale: true`; product and device endpoints remain independent.
 
-Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE`, and `UNKNOWN`. Valid ball owners are `CHATGPT`, `CODEX`, `HUMAN`, `EXTERNAL`, `NONE`, and `UNKNOWN`. Multiple products may reference the same repository. Restart the service after changing the manifest.
+Valid statuses are `RUNNING`, `READY`, `WAITING`, `BLOCKED`, `ACCEPTANCE`, `DONE`, and `UNKNOWN`. Valid ball owners are `CHATGPT`, `CODEX`, `HUMAN`, `EXTERNAL`, `NONE`, and `UNKNOWN`. Multiple products may reference the same repository. The v2 supervisor reloads the manifest on every discovery cycle, so repository additions do not require a service restart.
+
+## Autonomous portfolio runtime
+
+The v2 supervisor discovers ordinary open Issues from every unique repository in `config/products.json`; `lcc:autonomous` remains optional canary metadata. It excludes Issues without readable Acceptance criteria, Issues already claimed by an open PR, unavailable-worker work, and work requiring secrets or irreversible operations. A failure to read one repository does not stop discovery in the others. Dedicated Job workspaces and repository leases prevent an Issue or repository from being edited twice.
+
+`GET /api/v2` returns operational Jobs plus only the three newest completed Jobs, together with today's and lifetime completion counts. The complete durable record is never pruned. `GET /api/v2/history` supports `product`, `repository`, `state`, `issue`, `from`, `to`, `page`, and `pageSize` filters, and the dashboard exposes those filters with incremental paging.
 
 ## WorkItem issue sync foundation
 
