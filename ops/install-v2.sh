@@ -37,7 +37,8 @@ kill "$canary" 2>/dev/null || true
 wait "$canary" 2>/dev/null || true
 test "$ready" = true || { echo "v2 preflight failed" >&2; exit 1; }
 systemctl stop luckountry-control-center.service
-systemctl enable --now luckountry-control-center-v2.service
+systemctl enable luckountry-control-center-v2.service
+systemctl restart luckountry-control-center-v2.service
 i=0
 while test "$i" -lt 30; do
   if curl -fsS http://127.0.0.1:3000/health | grep -q luckountry-control-center-v2; then break; fi
