@@ -57,9 +57,13 @@ async function smart(): Promise<{ health: string; temperatureC: number | null; a
   } catch { return { health: "UNKNOWN", temperatureC: null, available: false }; }
 }
 
+async function gpuTemperature():Promise<number|null>{
+  try{const{stdout}=await execFileAsync("/usr/bin/nvidia-smi",["--query-gpu=temperature.gpu","--format=csv,noheader,nounits"],{timeout:2000});const values=stdout.trim().split(/\s+/).map(Number).filter(Number.isFinite);return values.length?Math.max(...values):null;}catch{return null;}
+}
+
 export async function collectSystemStatus() {
-  const [osText, cpuInfo, statText, temps, filesystem, network, ssh, diskSmart] = await Promise.all([
-    safeRead("/etc/os-release"), safeRead("/proc/cpuinfo"), safeRead("/proc/stat"), temperatures(), statfs("/"), primaryNetwork(), serviceActive("ssh"), smart()
+  const [osText, cpuInfo, statText, temps, filesystem, network, ssh, diskSmart,gpu] = await Promise.all([
+    safeRead("/etc/os-release"), safeRead("/proc/cpuinfo"), safeRead("/proc/stat"), temperatures(), statfs("/"), primaryNetwork(), serviceActive("ssh"), smart(),gpuTemperature()
   ]);
   const currentCpu = parseCpuTimes(statText);
   const usage = cpuUsage(previousCpu, currentCpu);
@@ -76,6 +80,7 @@ export async function collectSystemStatus() {
     memory: { totalBytes: ramTotal, usedBytes: ramUsed, usedPercent: Math.round(ramUsed / ramTotal * 1000) / 10, status: severity(ramUsed / ramTotal * 100, 75, 90) },
     filesystem: { mount: "/", totalBytes: fsTotal, usedBytes: fsUsed, usedPercent: Math.round(fsUsed / fsTotal * 1000) / 10, status: severity(fsUsed / fsTotal * 100, 80, 92) },
     smart: diskSmart,
+    gpu:{temperatureC:gpu},
     network,
     services: { ssh, controlCenter: true }
   };

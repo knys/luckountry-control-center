@@ -20,12 +20,16 @@ function Telemetry {
     $totalDisk = [long]$disk.Size
     $usedDisk = $totalDisk - [long]$disk.FreeSpace
     $address = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1 -ExpandProperty IPAddress
+    $storageTemperature = try { $value = (Get-PhysicalDisk | Get-StorageReliabilityCounter | Where-Object { $null -ne $_.Temperature } | Measure-Object Temperature -Maximum).Maximum; if ($null -ne $value) { [double]$value } else { $null } } catch { $null }
+    $gpuTemperature = try { $values = @(& nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>$null | ForEach-Object { [double]$_ }); if ($values.Count) { [double]($values | Measure-Object -Maximum).Maximum } else { $null } } catch { $null }
     @{
         timestamp = [DateTime]::UtcNow.ToString("o")
         hostname = $env:COMPUTERNAME
         os = $os.Caption
         cpuUsagePercent = [double]$cpu.LoadPercentage
         cpuTemperatureC = $null # Standard Windows APIs do not reliably expose CPU package temperature.
+        storageTemperatureC = $storageTemperature
+        gpuTemperatureC = $gpuTemperature
         memory = Capacity ($totalMemory - $freeMemory) $totalMemory
         filesystem = Capacity $usedDisk $totalDisk
         ipv4 = $address
