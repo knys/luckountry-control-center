@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+test "$#" -eq 0 || { echo "arguments rejected" >&2; exit 64; }
+test "$(id -u)" -eq 0 || { echo "root required" >&2; exit 77; }
+target=/opt/luckountry-control-center-v2/current/dist/config/products.json
+backup=$target.canary-backup
+cp -a "$target" "$backup"
+restore(){ mv -f "$backup" "$target" 2>/dev/null || true; }
+trap restore EXIT INT TERM
+/usr/bin/node -e 'const fs=require("fs");const p=process.argv[1],v=JSON.parse(fs.readFileSync(p,"utf8")),x=v.products.find(x=>x.id==="barepo");if(!x||x.repository!=="knys/genba-report")process.exit(1);x.name="BAREPO [HOT RELOAD CANARY]";fs.writeFileSync(p+".next",JSON.stringify(v,null,2)+"\n")' "$target"
+chown root:root "$target.next"
+chmod 0644 "$target.next"
+mv -f "$target.next" "$target"
+i=0
+until /usr/bin/curl -fsS http://127.0.0.1:3000/api/v2 | /usr/bin/grep -q 'BAREPO \[HOT RELOAD CANARY\]'; do i=$((i+1)); test "$i" -lt 30 || exit 1; sleep 1; done
+restore
+trap - EXIT INT TERM
+i=0
+until ! /usr/bin/curl -fsS http://127.0.0.1:3000/api/v2 | /usr/bin/grep -q 'HOT RELOAD CANARY'; do i=$((i+1)); test "$i" -lt 30 || exit 1; sleep 1; done
+echo "manifest hot reload canary PASS"

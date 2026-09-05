@@ -20,6 +20,8 @@ ln -sfn "$release" "$root/current.next"
 mv -Tf "$root/current.next" "$root/current"
 install -o root -g root -m 0644 ops/luckountry-control-center-v2.service /etc/systemd/system/luckountry-control-center-v2.service
 install -o root -g root -m 0755 ops/lcc-v2-deploy /usr/local/sbin/lcc-v2-deploy
+install -o root -g root -m 0755 ops/lcc-v2-manifest-sync /usr/local/sbin/lcc-v2-manifest-sync
+install -o root -g root -m 0755 ops/lcc-v2-manifest-canary /usr/local/sbin/lcc-v2-manifest-canary
 install -o root -g root -m 0440 ops/luckountry-control-center-v2.sudoers /etc/sudoers.d/luckountry-control-center-v2
 /usr/sbin/visudo -cf /etc/sudoers.d/luckountry-control-center-v2
 systemctl daemon-reload
