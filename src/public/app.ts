@@ -12,7 +12,7 @@ const gb=(bytes:number|null)=>bytes===null?"--":`${(bytes/1073741824).toFixed(1)
 const percent=(value:number|null)=>value===null?"--%":`${value.toFixed(1)}%`;
 const temp=(value:number|null)=>value===null?"--°C":`${value.toFixed(1)}°C`;
 const historyTemp=(value:number|null)=>value===null?"N/A":`${value.toFixed(1)}°C`;
-const historyTime=(value:string|null)=>value?new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"N/A";
+const historyTime=(value:string|null)=>value?new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"N/A";
 const duration=(seconds:number|null)=>{if(seconds===null)return "--";const d=Math.floor(seconds/86400),h=Math.floor(seconds%86400/3600),m=Math.floor(seconds%3600/60);return `${d}d ${h}h ${m}m`};
 const age=(timestamp:string|null)=>{if(!timestamp)return "NEVER";const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(timestamp))/1000));return seconds<5?"NOW":seconds<60?`${seconds}s AGO`:`${Math.floor(seconds/60)}m AGO`};
 const safe=(value:string|null)=>value??"UNAVAILABLE";

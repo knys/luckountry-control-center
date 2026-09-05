@@ -28,6 +28,17 @@ function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function sample(value: unknown): TemperatureSample | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<TemperatureSample>;
+  if (typeof candidate.deviceId !== "string" || typeof candidate.timestamp !== "string" || dateKey(candidate.timestamp) === null || !candidate.values || typeof candidate.values !== "object") return null;
+  return {
+    deviceId: candidate.deviceId,
+    timestamp: candidate.timestamp,
+    values: Object.fromEntries(sensors.map(sensor => [sensor, finite(candidate.values![sensor])])) as TemperatureValues
+  };
+}
+
 function dateKey(timestamp: string): string | null {
   const date = new Date(timestamp);
   return Number.isFinite(date.valueOf()) ? tokyoDate.format(date) : null;
@@ -77,7 +88,10 @@ export class DurableTemperatureHistory implements TemperatureHistory {
   static async open(path: string): Promise<DurableTemperatureHistory> {
     try {
       const samples = (await readFile(path, "utf8")).split("\n").filter(Boolean).flatMap(line => {
-        try { return [JSON.parse(line) as TemperatureSample]; } catch { return []; }
+        try {
+          const parsed = sample(JSON.parse(line));
+          return parsed ? [parsed] : [];
+        } catch { return []; }
       });
       return new DurableTemperatureHistory(path, samples);
     } catch (error) {

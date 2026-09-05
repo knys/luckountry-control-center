@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
@@ -24,13 +24,30 @@ test("derives Tokyo daily and all-time maxima from raw samples", () => {
 
 test("persists raw observations and restores them", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lcc-temperature-"));
-  const path = join(directory, "history.jsonl");
-  const history = await DurableTemperatureHistory.open(path);
-  await history.observe("machine", "2026-09-05T00:00:00.000Z", values(41, 35, 60), "2026-09-05T00:00:00.000Z");
-  const reopened = await DurableTemperatureHistory.open(path);
-  const summary = await reopened.observe("machine", "2026-09-05T01:00:00.000Z", values(43, 36, 58), "2026-09-05T01:00:00.000Z");
-  assert.equal(summary.cpu.allTimeMaxC, 43);
-  assert.equal(summary.gpu.allTimeMaxC, 60);
-  const stored = (await readFile(path, "utf8")).trim().split("\n");
-  assert.equal(stored.length, 2);
+  try {
+    const path = join(directory, "history.jsonl");
+    const history = await DurableTemperatureHistory.open(path);
+    await history.observe("machine", "2026-09-05T00:00:00.000Z", values(41, 35, 60), "2026-09-05T00:00:00.000Z");
+    const reopened = await DurableTemperatureHistory.open(path);
+    const summary = await reopened.observe("machine", "2026-09-05T01:00:00.000Z", values(43, 36, 58), "2026-09-05T01:00:00.000Z");
+    assert.equal(summary.cpu.allTimeMaxC, 43);
+    assert.equal(summary.gpu.allTimeMaxC, 60);
+    const stored = (await readFile(path, "utf8")).trim().split("\n");
+    assert.equal(stored.length, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("ignores malformed stored samples without losing valid history", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lcc-temperature-"));
+  try {
+    const path = join(directory, "history.jsonl");
+    await writeFile(path, `${JSON.stringify({ deviceId: "machine", timestamp: "2026-09-05T00:00:00.000Z", values: values(41) })}\n{"unexpected":true}\nnot-json\n`);
+    const history = await DurableTemperatureHistory.open(path);
+    const summary = await history.observe("machine", "2026-09-05T01:00:00.000Z", values(43), "2026-09-05T01:00:00.000Z");
+    assert.equal(summary.cpu.allTimeMaxC, 43);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
